@@ -766,6 +766,15 @@ function exportFlaggedPDF() {
 
 
 function wireInputs() {
+  // Export flagged PDF
+els.export?.addEventListener("click", () => {
+  if (!students.length) {
+    alert("Upload a report first.");
+    return;
+  }
+  exportFlaggedPDF();
+});
+
   els.closeAdvancedBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -854,6 +863,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
