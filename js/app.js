@@ -1,6 +1,6 @@
 // js/app.js
 const ORG_DOMAIN = "pukekohehigh.school.nz";
-const STORAGE_KEY = "attendance_dashboard_settings_v7";
+const STORAGE_KEY = "attendance_dashboard_settings_v8";
 
 // Bridge student page URL pattern
 function bridgeUrlFor(studentId) {
@@ -56,7 +56,7 @@ const els = {
   statTitle: document.getElementById("statTitle"),
 };
 
-// Status banner
+// Status banner (helps diagnose GitHub Pages issues)
 const statusBar = document.createElement("div");
 statusBar.style.maxWidth = "1200px";
 statusBar.style.margin = "0 auto";
@@ -106,7 +106,7 @@ function repairCsvText(text) {
     t = before + "\n" + after;
   }
 
-  // Break rows if export is one long line
+  // If there are too few line breaks, attempt to break into rows before ID patterns
   const newlineCount = (t.match(/\n/g) || []).length;
   if (newlineCount < 5) {
     t = t.replace(/(\s)(\d{4,6},)/g, "\n$2");
@@ -305,7 +305,7 @@ function severityPercent(score) {
 /* ------------------------- Email helpers (template-driven) ------------------------- */
 
 function openParentEmailViaBridge({ bridgeUrl, mailtoParent }) {
-  // 1) Always open Bridge
+  // 1) Always open Bridge (new tab)
   window.open(bridgeUrl, "_blank", "noopener,noreferrer");
 
   // 2) Try open Outlook mailto
@@ -313,7 +313,6 @@ function openParentEmailViaBridge({ bridgeUrl, mailtoParent }) {
     try {
       window.location.href = mailtoParent;
     } catch (e) {
-      // Browser may block; teacher still has Bridge open
       alert("Bridge opened.\n\nIf Outlook didn't open, click Email Parent again.");
     }
   }, 150);
@@ -367,43 +366,62 @@ function buildMailto(templateKey, student, subjThresh, toEmail) {
   return `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-/* ---------------------------- Render ---------------------------- */
+/* ------------------------- Filtering + Search helpers ------------------------- */
 
-function render() {
-  if (!students.length) {
-    els.empty.style.display = "block";
-    els.empty.textContent = "Upload a report to begin.";
-    els.grid.innerHTML = "";
-    els.statStudents.textContent = "0";
-    els.statFlagged.textContent = "0";
-    els.statRedOrange.textContent = "0";
-    els.statHighUnjust.textContent = "0";
-    els.statTitle.textContent = reportTitle || "—";
-    return;
-  }
+function buildSearchHaystack(student) {
+  const subjectHay = (student.subjects || [])
+    .map(sub => `${sub.code} ${sub.name}`)
+    .join(" ");
 
-  const q = els.search.value.trim().toLowerCase();
-  const y = els.year.value;
-  const tierFilter = els.tier.value;
-  const sort = els.sort.value;
+  return `
+    ${student.lastName}
+    ${student.firstName}
+    ${student.studentId}
+    ${student.gender}
+    ${student.yearLevel}
+    ${student.formClass}
+    ${student.timetableClass}
+    ${subjectHay}
+  `.toLowerCase();
+}
 
-  const overallThresh = Number(els.overallThreshold.value) || 80;
-  const subjThresh = Number(els.subjectThreshold.value) || 80;
-  const unjustThresh = Number(els.unjustThreshold.value) || 10;
-  const maxSubjects = Math.max(1, Math.min(12, Number(els.maxSubjects.value) || 5));
-  const flaggedOnly = els.flagOnly.checked;
-
+function getReasonGate() {
   const reasonFilters = {
-    lowOverall: els.fLowOverall.checked,
-    highUnjust: els.fHighUnjust.checked,
-    lowSubject: els.fLowSubject.checked,
-    missingSubject: els.fMissingSubject.checked
+    lowOverall: !!els.fLowOverall?.checked,
+    highUnjust: !!els.fHighUnjust?.checked,
+    lowSubject: !!els.fLowSubject?.checked,
+    missingSubject: !!els.fMissingSubject?.checked
   };
 
   const anyReasonOn = Object.values(reasonFilters).some(v => v === true);
-  const reasonGate = anyReasonOn
+  return anyReasonOn
     ? reasonFilters
     : { lowOverall: true, highUnjust: true, lowSubject: true, missingSubject: true };
+}
+
+function getCurrentThresholds() {
+  return {
+    overallThresh: Number(els.overallThreshold?.value) || 80,
+    subjThresh: Number(els.subjectThreshold?.value) || 80,
+    unjustThresh: Number(els.unjustThreshold?.value) || 10,
+    maxSubjects: Math.max(1, Math.min(12, Number(els.maxSubjects?.value) || 5))
+  };
+}
+
+/* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
+
+function buildFlaggedListForExport() {
+  if (!students.length) return { list: [], thresholds: null };
+
+  const qRaw = els.search?.value?.trim().toLowerCase() || "";
+  const qParts = qRaw.split(/\s+/).filter(Boolean);
+
+  const y = els.year?.value || "";
+  const tierFilter = els.tier?.value || "";
+  const sort = els.sort?.value || "risk";
+
+  const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
+  const reasonGate = getReasonGate();
 
   let filtered = students.filter(s => {
     if (y && String(s.yearLevel) !== String(y)) return false;
@@ -413,23 +431,180 @@ function render() {
       if (t !== tierFilter) return false;
     }
 
-if (q) {
-  const subjectHay = (s.subjects || [])
-    .map(sub => `${sub.code} ${sub.name}`)
-    .join(" ");
+    if (qParts.length) {
+      const hay = buildSearchHaystack(s);
+      for (const p of qParts) {
+        if (!hay.includes(p)) return false;
+      }
+    }
 
-  const hay = `
-    ${s.lastName}
-    ${s.firstName}
-    ${s.studentId}
-    ${s.yearLevel}
-    ${s.formClass}
-    ${s.timetableClass}
-    ${subjectHay}
-  `.toLowerCase();
+    return true;
+  });
 
-  if (!hay.includes(q)) return false;
+  filtered.sort((a, b) => {
+    if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
+    if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
+    if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
+    if (sort === "unjust") return (b.unjustified ?? 0) - (a.unjustified ?? 0);
+    return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
+  });
+
+  const flagged = filtered.filter(s => isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate));
+
+  return {
+    list: flagged,
+    thresholds: { overallThresh, subjThresh, unjustThresh }
+  };
 }
+
+function exportFlaggedPDF_NoPopup() {
+  const { list, thresholds } = buildFlaggedListForExport();
+
+  if (!list.length) {
+    alert("No flagged students in the current view.");
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleString();
+  const report = reportTitle || "Attendance Report";
+
+  const { overallThresh, subjThresh, unjustThresh } = thresholds;
+
+  const rowsHtml = list.map(s => {
+    const tier = overallTier(s.presentPct);
+    const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
+
+    const lowSubs = (s.subjects || [])
+      .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
+      .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
+      .slice(0, 6);
+
+    const lowSubsText = lowSubs.length
+      ? lowSubs.map(sub => `${escapeHtml(sub.name)} (${sub.attendance.toFixed(1)}%)`).join("<br>")
+      : `<span class="print-small">None</span>`;
+
+    const link = bridgeUrlFor(s.studentId);
+
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</strong><br>
+          <span class="print-small">ID: ${escapeHtml(s.studentId)} • Y${escapeHtml(s.yearLevel)} • ${escapeHtml(s.formClass || "—")}</span>
+        </td>
+        <td><span class="print-badge ${tier}">${escapeHtml(overall)}</span></td>
+        <td>${escapeHtml(String(s.unjustified ?? 0))}</td>
+        <td>${lowSubsText}</td>
+        <td><span class="print-small">${escapeHtml(link)}</span></td>
+      </tr>
+    `;
+  }).join("");
+
+  // Save original page HTML (so we can restore after printing)
+  const originalHtml = document.body.innerHTML;
+  const originalTitle = document.title;
+
+  document.title = "Flagged Attendance Report";
+  document.body.innerHTML = `
+    <div class="print-page">
+      <div class="print-header">
+        <div class="print-title">
+          <h1>Flagged Attendance Report</h1>
+          <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
+        </div>
+        <div class="print-metrics">
+          <div><strong>${list.length}</strong> flagged students</div>
+          <div>Overall threshold: ${overallThresh}%</div>
+          <div>Subject threshold: ${subjThresh}%</div>
+          <div>Unjustified threshold: ${unjustThresh}</div>
+        </div>
+      </div>
+
+      <table class="print-table">
+        <thead>
+          <tr>
+            <th style="width:26%;">Student</th>
+            <th style="width:10%;">Overall</th>
+            <th style="width:10%;">Unjustified</th>
+            <th style="width:34%;">Low Subjects (&lt; ${subjThresh}%)</th>
+            <th style="width:20%;">Bridge Profile</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+
+      <p class="print-small" style="margin-top:12px;">
+        Tip: Choose “Save as PDF” in the print dialog.
+      </p>
+    </div>
+  `;
+
+  const restore = () => {
+    document.body.innerHTML = originalHtml;
+    document.title = originalTitle;
+
+    // Re-hook listeners + restore UI
+    cacheDom(); // safe re-cache (in case DOM changed)
+    wireInputs();
+    wireFileUpload();
+    render();
+  };
+
+  window.addEventListener("afterprint", restore, { once: true });
+
+  setTimeout(() => {
+    window.print();
+
+    // Fallback restore (some browsers don’t fire afterprint reliably)
+    setTimeout(() => {
+      try { restore(); } catch {}
+    }, 900);
+  }, 250);
+}
+
+/* ------------------------- Render ------------------------- */
+
+function render() {
+  if (!students.length) {
+    if (els.empty) {
+      els.empty.style.display = "block";
+      els.empty.textContent = "Upload a report to begin.";
+    }
+    if (els.grid) els.grid.innerHTML = "";
+    if (els.statStudents) els.statStudents.textContent = "0";
+    if (els.statFlagged) els.statFlagged.textContent = "0";
+    if (els.statRedOrange) els.statRedOrange.textContent = "0";
+    if (els.statHighUnjust) els.statHighUnjust.textContent = "0";
+    if (els.statTitle) els.statTitle.textContent = reportTitle || "—";
+    return;
+  }
+
+  const qRaw = els.search?.value?.trim().toLowerCase() || "";
+  const qParts = qRaw.split(/\s+/).filter(Boolean);
+
+  const y = els.year?.value || "";
+  const tierFilter = els.tier?.value || "";
+  const sort = els.sort?.value || "risk";
+
+  const { overallThresh, subjThresh, unjustThresh, maxSubjects } = getCurrentThresholds();
+  const flaggedOnly = !!els.flagOnly?.checked;
+
+  const reasonGate = getReasonGate();
+
+  let filtered = students.filter(s => {
+    if (y && String(s.yearLevel) !== String(y)) return false;
+
+    if (tierFilter) {
+      const t = overallTier(s.presentPct);
+      if (t !== tierFilter) return false;
+    }
+
+    if (qParts.length) {
+      const hay = buildSearchHaystack(s);
+      for (const p of qParts) {
+        if (!hay.includes(p)) return false;
+      }
+    }
 
     const flagged = isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate);
     if (flaggedOnly && !flagged) return false;
@@ -452,19 +627,23 @@ if (q) {
   }).length;
   const highUnjustCount = filtered.filter(s => (s.unjustified || 0) >= unjustThresh).length;
 
-  els.statStudents.textContent = filtered.length;
-  els.statFlagged.textContent = flaggedCount;
-  els.statRedOrange.textContent = redOrange;
-  els.statHighUnjust.textContent = highUnjustCount;
-  els.statTitle.textContent = reportTitle || "—";
+  if (els.statStudents) els.statStudents.textContent = filtered.length;
+  if (els.statFlagged) els.statFlagged.textContent = flaggedCount;
+  if (els.statRedOrange) els.statRedOrange.textContent = redOrange;
+  if (els.statHighUnjust) els.statHighUnjust.textContent = highUnjustCount;
+  if (els.statTitle) els.statTitle.textContent = reportTitle || "—";
+
+  if (!els.grid) return;
 
   els.grid.innerHTML = "";
   if (!filtered.length) {
-    els.empty.style.display = "block";
-    els.empty.textContent = "No students match your filters.";
+    if (els.empty) {
+      els.empty.style.display = "block";
+      els.empty.textContent = "No students match your filters.";
+    }
     return;
   }
-  els.empty.style.display = "none";
+  if (els.empty) els.empty.style.display = "none";
 
   for (const s of filtered) {
     const overall = (s.presentPct === null) ? "N/A" : `${s.presentPct.toFixed(1)}%`;
@@ -578,207 +757,75 @@ if (q) {
   }
 }
 
+/* ---------------------- DOM refresh (for restore after print) ---------------------- */
+
+function cacheDom() {
+  // in case restore rebuilt DOM, refresh references
+  els.file = document.getElementById("file");
+  els.search = document.getElementById("search");
+  els.year = document.getElementById("year");
+  els.tier = document.getElementById("tier");
+  els.sort = document.getElementById("sort");
+  els.flagOnly = document.getElementById("flagOnly");
+
+  els.overallThreshold = document.getElementById("overallThreshold");
+  els.subjectThreshold = document.getElementById("subjectThreshold");
+  els.unjustThreshold = document.getElementById("unjustThreshold");
+  els.maxSubjects = document.getElementById("maxSubjects");
+
+  els.fLowOverall = document.getElementById("fLowOverall");
+  els.fHighUnjust = document.getElementById("fHighUnjust");
+  els.fLowSubject = document.getElementById("fLowSubject");
+  els.fMissingSubject = document.getElementById("fMissingSubject");
+
+  els.advanced = document.getElementById("advanced");
+  els.closeAdvancedBtn = document.getElementById("closeAdvancedBtn");
+
+  els.export = document.getElementById("export");
+  els.reset = document.getElementById("reset");
+  els.grid = document.getElementById("grid");
+  els.empty = document.getElementById("empty");
+
+  els.statStudents = document.getElementById("statStudents");
+  els.statFlagged = document.getElementById("statFlagged");
+  els.statRedOrange = document.getElementById("statRedOrange");
+  els.statHighUnjust = document.getElementById("statHighUnjust");
+  els.statTitle = document.getElementById("statTitle");
+}
+
 /* ---------------------- Wiring ---------------------- */
 
-function buildFlaggedListForExport() {
-  if (!students.length) return { list: [], thresholds: null };
-
-  const q = els.search.value.trim().toLowerCase();
-  const y = els.year.value;
-  const tierFilter = els.tier.value;
-  const sort = els.sort.value;
-
-  const overallThresh = Number(els.overallThreshold.value) || 80;
-  const subjThresh = Number(els.subjectThreshold.value) || 80;
-  const unjustThresh = Number(els.unjustThreshold.value) || 10;
-
-  const reasonFilters = {
-    lowOverall: els.fLowOverall.checked,
-    highUnjust: els.fHighUnjust.checked,
-    lowSubject: els.fLowSubject.checked,
-    missingSubject: els.fMissingSubject.checked
-  };
-
-  const anyReasonOn = Object.values(reasonFilters).some(v => v === true);
-  const reasonGate = anyReasonOn
-    ? reasonFilters
-    : { lowOverall: true, highUnjust: true, lowSubject: true, missingSubject: true };
-
-  // same filter logic as render()
-  let filtered = students.filter(s => {
-    if (y && String(s.yearLevel) !== String(y)) return false;
-
-    if (tierFilter) {
-      const t = overallTier(s.presentPct);
-      if (t !== tierFilter) return false;
-    }
-
-    if (q) {
-      const subjectHay = (s.subjects || [])
-        .map(sub => `${sub.code} ${sub.name}`)
-        .join(" ");
-
-      const hay = `
-        ${s.lastName}
-        ${s.firstName}
-        ${s.studentId}
-        ${s.yearLevel}
-        ${s.formClass}
-        ${s.timetableClass}
-        ${subjectHay}
-      `.toLowerCase();
-
-      if (!hay.includes(q)) return false;
-    }
-
-    return true;
-  });
-
-  // sort same as render()
-  filtered.sort((a, b) => {
-    if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
-    if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
-    if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
-    if (sort === "unjust") return (b.unjustified ?? 0) - (a.unjustified ?? 0);
-    return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
-  });
-
-  // ONLY flagged for export
-  const flagged = filtered.filter(s => isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate));
-
-  return {
-    list: flagged,
-    thresholds: { overallThresh, subjThresh, unjustThresh }
-  };
-}
-function exportFlaggedPDF() {
-  const { list, thresholds } = buildFlaggedListForExport();
-
-  if (!list.length) {
-    alert("No flagged students in the current view.");
-    return;
-  }
-
-  const now = new Date();
-  const dateStr = now.toLocaleString();
-
-  const report = reportTitle || "Attendance Report";
-  const { overallThresh, subjThresh, unjustThresh } = thresholds;
-
-  // Build table rows
-  const rowsHtml = list.map(s => {
-    const tier = overallTier(s.presentPct);
-    const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
-
-    const lowSubs = (s.subjects || [])
-      .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
-      .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
-      .slice(0, 6);
-
-    const lowSubsText = lowSubs.length
-      ? lowSubs.map(sub => `${escapeHtml(sub.name)} (${sub.attendance.toFixed(1)}%)`).join("<br>")
-      : `<span class="print-small">None</span>`;
-
-    const link = bridgeUrlFor(s.studentId);
-
-    return `
-      <tr>
-        <td>
-          <strong>${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</strong><br>
-          <span class="print-small">ID: ${escapeHtml(s.studentId)} • Y${escapeHtml(s.yearLevel)} • ${escapeHtml(s.formClass || "—")}</span>
-        </td>
-        <td><span class="print-badge ${tier}">${escapeHtml(overall)}</span></td>
-        <td>${escapeHtml(String(s.unjustified ?? 0))}</td>
-        <td>${lowSubsText}</td>
-        <td>
-          <a class="print-link" href="${link}" target="_blank" rel="noreferrer">${link}</a>
-        </td>
-      </tr>
-    `;
-  }).join("");
-
-  // Pull in your current stylesheet for consistent fonts
-  const cssHref = document.querySelector('link[rel="stylesheet"]')?.getAttribute("href") || "styles.css";
-
-  const html = `
-    <!doctype html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Flagged Attendance Report</title>
-      <link rel="stylesheet" href="${cssHref}">
-    </head>
-    <body>
-      <div class="print-page">
-        <div class="print-header">
-          <div class="print-title">
-            <h1>Flagged Attendance Report</h1>
-            <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
-          </div>
-          <div class="print-metrics">
-            <div><strong>${list.length}</strong> flagged students</div>
-            <div>Overall threshold: ${overallThresh}%</div>
-            <div>Subject threshold: ${subjThresh}%</div>
-            <div>Unjustified threshold: ${unjustThresh}</div>
-          </div>
-        </div>
-
-        <table class="print-table">
-          <thead>
-            <tr>
-              <th style="width:26%;">Student</th>
-              <th style="width:10%;">Overall</th>
-              <th style="width:10%;">Unjustified</th>
-              <th style="width:34%;">Low Subjects (&lt; ${subjThresh}%)</th>
-              <th style="width:20%;">Bridge Profile</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-
-        <p class="print-small" style="margin-top:12px;">
-          Tip: Use Print → “Save as PDF”. This report includes Bridge links for quick follow-up.
-        </p>
-      </div>
-
-      <script>
-        // Auto open print dialog when the page is ready
-        window.addEventListener("load", () => {
-          setTimeout(() => window.print(), 250);
-        });
-      </script>
-    </body>
-    </html>
-  `;
-
-  const win = window.open("", "_blank", "noopener,noreferrer");
-  if (!win) {
-    alert("Pop-up blocked. Please allow pop-ups for this site to export PDF.");
-    return;
-  }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-}
-
-
 function wireInputs() {
-  // Export flagged PDF
-els.export?.addEventListener("click", () => {
-  if (!students.length) {
-    alert("Upload a report first.");
-    return;
-  }
-  exportFlaggedPDF();
-});
+  cacheDom();
 
   els.closeAdvancedBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    els.advanced.open = false;
+    if (els.advanced) els.advanced.open = false;
+  });
+
+  // Export flagged to PDF (no popups)
+  els.export?.addEventListener("click", () => {
+    if (!students.length) {
+      alert("Upload a report first.");
+      return;
+    }
+    exportFlaggedPDF_NoPopup();
+  });
+
+  // Reset (optional)
+  els.reset?.addEventListener("click", () => {
+    if (confirm("Clear the current report and reset filters?")) {
+      students = [];
+      reportTitle = "";
+      if (els.file) els.file.value = "";
+      if (els.search) els.search.value = "";
+      if (els.year) els.year.value = "";
+      if (els.tier) els.tier.value = "";
+      if (els.sort) els.sort.value = "risk";
+      if (els.flagOnly) els.flagOnly.checked = false;
+      render();
+    }
   });
 
   [
@@ -795,6 +842,7 @@ els.export?.addEventListener("click", () => {
 /* ---------------------- File Upload ---------------------- */
 
 function wireFileUpload() {
+  cacheDom();
   if (!els.file) return;
 
   els.file.addEventListener("change", async (e) => {
@@ -857,13 +905,9 @@ function wireFileUpload() {
 
 (async function main() {
   setStatus("Starting...");
+  await initConfigs();
   wireInputs();
   wireFileUpload();
-  await initConfigs();
   setStatus("Ready. Upload a CSV.");
   render();
 })();
-
-
-
-
