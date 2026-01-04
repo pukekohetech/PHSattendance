@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Attendance Quick Scan</title>
+
+  <!-- PapaParse -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+<header>
+  <h1>Attendance Quick Scan</h1>
+  <div class="sub">
+    Upload the detailed attendance CSV → quickly identify attendance concerns.
+    <br/>Email buttons open Outlook with pre-filled messages aligned to our school values.
+  </div>
+</header>
+
+<section class="controls">
+  <div class="control">
+    <label>Upload report CSV</label>
+    <input id="file" type="file" accept=".csv"/>
+    <div class="hint">If your export is “one long line”, it will be repaired automatically.</div>
+  </div>
+
+  <div class="control">
+    <label>Search</label>
+    <input id="search" type="text" placeholder="Name / ID / form class..." />
+    <div class="hint">Example: “Smith”, “10TEC”, “23562”</div>
+  </div>
+
+  <div class="control">
+    <label>Year level</label>
+    <select id="year"><option value="">All</option></select>
+  </div>
+
+  <div class="control">
+    <label>Show tier</label>
+    <select id="tier">
+      <option value="">All tiers</option>
+      <option value="bad">🔴 Critical</option>
+      <option value="warn">🟠 Concern</option>
+      <option value="watch">🟡 Watch</option>
+      <option value="good">🟢 OK</option>
+    </select>
+  </div>
+
+  <div class="control">
+    <label>Sort</label>
+    <select id="sort">
+      <option value="risk">Worst first</option>
+      <option value="attendanceAsc">Overall % (low → high)</option>
+      <option value="attendanceDesc">Overall % (high → low)</option>
+      <option value="unjust">Unjustified (high → low)</option>
+      <option value="name">Name (A → Z)</option>
+    </select>
+
+    <div class="toggleRow">
+      <span>Show only flagged</span>
+      <label class="switch">
+        <input id="flagOnly" type="checkbox" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <details class="advanced" id="advanced">
+      <summary>
+        <span class="advTitle">⚙ Advanced settings</span>
+        <button class="miniBtn" id="closeAdvancedBtn" type="button">Close</button>
+      </summary>
+
+      <div class="advGrid">
+        <div>
+          <label style="margin:0 0 6px;">Overall below (%)</label>
+          <input id="overallThreshold" type="number" min="0" max="100" value="80" />
+        </div>
+        <div>
+          <label style="margin:0 0 6px;">Subject below (%)</label>
+          <input id="subjectThreshold" type="number" min="0" max="100" value="80" />
+        </div>
+        <div>
+          <label style="margin:10px 0 6px;">Unjustified ≥</label>
+          <input id="unjustThreshold" type="number" min="0" value="10" />
+        </div>
+        <div>
+          <label style="margin:10px 0 6px;">Preview worst subjects</label>
+          <input id="maxSubjects" type="number" min="1" max="12" value="5" />
+        </div>
+      </div>
+
+      <label style="margin-top:12px;">Filter by reason (optional)</label>
+      <div class="checkGrid">
+        <label class="check"><input id="fLowOverall" type="checkbox" checked> Low overall</label>
+        <label class="check"><input id="fHighUnjust" type="checkbox" checked> High unjustified</label>
+        <label class="check"><input id="fLowSubject" type="checkbox" checked> Low subject</label>
+        <label class="check"><input id="fMissingSubject" type="checkbox" checked> Missing subject data</label>
+      </div>
+
+      <div class="btnrow">
+        <button id="export" class="secondary" disabled type="button">Export flagged CSV</button>
+        <button id="reset" class="secondary" disabled type="button">Reset</button>
+      </div>
+    </details>
+  </div>
+</section>
+
+<section class="statsbar">
+  <div class="stat"><div class="k">Students shown</div><div class="v" id="statStudents">0</div></div>
+  <div class="stat"><div class="k">Flagged shown</div><div class="v" id="statFlagged">0</div></div>
+  <div class="stat"><div class="k">Critical / Concern</div><div class="v" id="statRedOrange">0</div></div>
+  <div class="stat"><div class="k">High unjustified</div><div class="v" id="statHighUnjust">0</div></div>
+  <div class="stat"><div class="k">Report title</div><div class="v" id="statTitle" style="font-size:13px; font-weight:1100;">—</div></div>
+</section>
+
+<main>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" style="display:none;">Upload a report to begin.</div>
+</main>
+
+<script src="js/app.js"></script>
+</body>
+</html>
