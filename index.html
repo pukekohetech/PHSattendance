@@ -1,6 +1,19 @@
 <!doctype html>
 <html lang="en">
 <head>
+
+  <link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b1220">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <button id="installBtn" class="installBtn" type="button" style="display:none;">
+  Install App
+</button>
+
+
+  
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
@@ -164,8 +177,45 @@
   <div id="empty" class="empty" style="display:none;">Upload a report to begin.</div>
 </main>
 
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js").catch(console.error);
+    });
+  }
+</script>
+
+  
 <!-- Your app -->
 <script src="js/app.js"></script>
 
+  <script>
+  let deferredPrompt = null;
+  const btn = document.getElementById("installBtn");
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (btn) btn.style.display = "inline-flex";
+  });
+
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      btn.style.display = "none";
+    });
+  }
+
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null;
+    if (btn) btn.style.display = "none";
+  });
+</script>
+
+
 </body>
 </html>
+
