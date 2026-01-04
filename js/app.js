@@ -580,6 +580,79 @@ if (q) {
 
 /* ---------------------- Wiring ---------------------- */
 
+function buildFlaggedListForExport() {
+  if (!students.length) return { list: [], thresholds: null };
+
+  const q = els.search.value.trim().toLowerCase();
+  const y = els.year.value;
+  const tierFilter = els.tier.value;
+  const sort = els.sort.value;
+
+  const overallThresh = Number(els.overallThreshold.value) || 80;
+  const subjThresh = Number(els.subjectThreshold.value) || 80;
+  const unjustThresh = Number(els.unjustThreshold.value) || 10;
+
+  const reasonFilters = {
+    lowOverall: els.fLowOverall.checked,
+    highUnjust: els.fHighUnjust.checked,
+    lowSubject: els.fLowSubject.checked,
+    missingSubject: els.fMissingSubject.checked
+  };
+
+  const anyReasonOn = Object.values(reasonFilters).some(v => v === true);
+  const reasonGate = anyReasonOn
+    ? reasonFilters
+    : { lowOverall: true, highUnjust: true, lowSubject: true, missingSubject: true };
+
+  // same filter logic as render()
+  let filtered = students.filter(s => {
+    if (y && String(s.yearLevel) !== String(y)) return false;
+
+    if (tierFilter) {
+      const t = overallTier(s.presentPct);
+      if (t !== tierFilter) return false;
+    }
+
+    if (q) {
+      const subjectHay = (s.subjects || [])
+        .map(sub => `${sub.code} ${sub.name}`)
+        .join(" ");
+
+      const hay = `
+        ${s.lastName}
+        ${s.firstName}
+        ${s.studentId}
+        ${s.yearLevel}
+        ${s.formClass}
+        ${s.timetableClass}
+        ${subjectHay}
+      `.toLowerCase();
+
+      if (!hay.includes(q)) return false;
+    }
+
+    return true;
+  });
+
+  // sort same as render()
+  filtered.sort((a, b) => {
+    if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
+    if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
+    if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
+    if (sort === "unjust") return (b.unjustified ?? 0) - (a.unjustified ?? 0);
+    return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
+  });
+
+  // ONLY flagged for export
+  const flagged = filtered.filter(s => isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate));
+
+  return {
+    list: flagged,
+    thresholds: { overallThresh, subjThresh, unjustThresh }
+  };
+}
+
+
 function wireInputs() {
   els.closeAdvancedBtn?.addEventListener("click", (e) => {
     e.preventDefault();
@@ -669,4 +742,5 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
