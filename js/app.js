@@ -509,6 +509,14 @@ function render() {
     card.className = "card";
 
     card.innerHTML = `
+    const parentBtn = card.querySelector('[data-action="parent-via-bridge"]');
+if (parentBtn && mailtoParent) {
+  parentBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    openParentEmailViaBridge({ bridgeUrl, mailtoParent });
+  });
+}
+
       <div class="severity">
         <div class="fill ${sevClass}" style="width:${sev}%;"></div>
       </div>
@@ -684,5 +692,6 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
