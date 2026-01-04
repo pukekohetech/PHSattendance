@@ -25,7 +25,7 @@
         "Subjects where your attendance has been lowest:",
         "{{lowSubjectsBulletList}}",
         "",
-        "If something is making it hard to be at school, please reach out to your teacher, form teacher, or Dean. We’re here to listen and support you with care and respect.",
+        "If something is making it hard to be at school, please reach out. We’re here to listen and support you with care and respect.",
         "",
         "You have the ability to step up and take charge of your learning. We know you can make strong choices, stay committed, and keep moving forward.",
         "",
@@ -65,3 +65,4 @@
     }
   }
 }
+
