@@ -531,33 +531,64 @@ function render() {
 
       <div class="subjectStrip">${strip}</div>
 
-      <div class="actions">
-        <a class="emailBtn secondary" href="${bridgeUrl}" target="_blank" rel="noreferrer" onclick="event.stopPropagation();">
-          Open Bridge Profile
-        </a>
+const canEmail = !!mailtoParent && !!mailtoStudent;
 
-        ${
-          emailDisabled
-            ? `<button class="emailBtn secondary" disabled onclick="event.stopPropagation();">Email Parent/Caregiver (templates missing)</button>`
-            : `<a class="emailBtn secondary" href="${mailtoParent}" onclick="event.stopPropagation();">Email Parent/Caregiver (paste address)</a>`
-        }
+card.innerHTML = `
+  <div class="severity">
+    <div class="fill ${sevClass}" style="width:${sev}%;"></div>
+  </div>
 
-        ${
-          emailDisabled
-            ? `<button class="emailBtn" disabled onclick="event.stopPropagation();">Email Student (templates missing)</button>`
-            : `<a class="emailBtn" href="${mailtoStudent}" onclick="event.stopPropagation();">Email Student Check-in</a>`
-        }
-
-        <span class="tiny">
-          Parent email: Open Bridge → copy address → Email Parent | Student: ${escapeHtml(studentTo)}
-        </span>
+  <div class="toprow">
+    <div>
+      <div class="name">${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</div>
+      <div class="meta">
+        ID: ${escapeHtml(s.studentId)} • Y${escapeHtml(s.yearLevel)} • ${escapeHtml(s.formClass || "—")}
       </div>
-
-      <div class="details">
-        <h4>Worst ${maxSubjects} subjects (click card to collapse)</h4>
-        ${detailsHtml || `<div class="empty" style="box-shadow:none;">No subject data found.</div>`}
+      <div class="tierLabel ${tier}">
+        <span class="tierDot"></span> ${escapeHtml(tierText)}
       </div>
-    `;
+    </div>
+
+    <div class="badge ${tier}">${escapeHtml(overall)}</div>
+  </div>
+
+  <div class="chips">${chips}</div>
+
+  <div class="subjectStrip">${strip}</div>
+
+  <div class="actions">
+    ${
+      canEmail
+        ? `<button class="emailBtn secondary" type="button" data-action="parent-via-bridge">
+             Email Parent (via Bridge)
+           </button>`
+        : `<button class="emailBtn secondary" disabled type="button">
+             Email Parent (templates missing)
+           </button>`
+    }
+
+    <a class="emailBtn" href="${mailtoStudent || "#"}"
+       onclick="event.stopPropagation(); ${mailtoStudent ? "" : "return false;"}"
+       ${mailtoStudent ? "" : "aria-disabled='true' style='opacity:0.5; pointer-events:none;'"}>
+      Email Student Check-in
+    </a>
+
+    <a class="emailBtn secondary" href="${bridgeUrl}" target="_blank" rel="noreferrer"
+       onclick="event.stopPropagation();">
+      Open Bridge Profile
+    </a>
+
+    <span class="tiny">
+      Parent email: click “Email Parent (via Bridge)” → copy email from Bridge → send
+    </span>
+  </div>
+
+  <div class="details">
+    <h4>Worst ${maxSubjects} subjects (click card to collapse)</h4>
+    ${detailsHtml || `<div class="empty" style="box-shadow:none;">No subject data found.</div>`}
+  </div>
+`;
+
 
     card.addEventListener("click", () => card.classList.toggle("expanded"));
     els.grid.appendChild(card);
@@ -653,4 +684,5 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
