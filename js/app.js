@@ -1,10 +1,27 @@
 // js/app.js
-
 const ORG_DOMAIN = "pukekohehigh.school.nz";
-const STORAGE_KEY = "attendance_dashboard_settings_v3";
+const STORAGE_KEY = "attendance_dashboard_settings_v5";
 
+// Your Bridge student page pattern (Option A)
+function bridgeUrlFor(studentId) {
+  return `https://pukekohe.bridge.school.nz/students/student/${encodeURIComponent(studentId)}`;
+}
+
+/**
+ * Email templates are loaded from:
+ *   data/email-templates.json
+ * Subject conversions are loaded from:
+ *   data/subject-map.json
+ *
+ * This file contains NO email wording.
+ */
 let emailConfig = null;
 let subjectMap = {};
+
+let reportTitle = "";
+let students = [];
+
+/* ------------------------- DOM Elements ------------------------- */
 
 const els = {
   file: document.getElementById("file"),
@@ -39,8 +56,20 @@ const els = {
   statTitle: document.getElementById("statTitle"),
 };
 
-let reportTitle = "";
-let students = [];
+// A small status banner (helps diagnose GitHub Pages issues)
+const statusBar = document.createElement("div");
+statusBar.style.maxWidth = "1200px";
+statusBar.style.margin = "0 auto";
+statusBar.style.padding = "0 18px 12px";
+statusBar.style.color = "rgba(11,18,32,0.7)";
+statusBar.style.fontSize = "12px";
+statusBar.innerHTML = "Status: Ready.";
+document.querySelector("header")?.after(statusBar);
+
+function setStatus(msg) {
+  statusBar.innerHTML = `Status: ${msg}`;
+  console.log("[Attendance Dashboard]", msg);
+}
 
 /* --------------------------- Utilities --------------------------- */
 
@@ -54,25 +83,35 @@ function parseMaybeNumber(v) {
 
 function escapeHtml(s) {
   return String(s ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
+/**
+ * Repairs:
+ * - report title line above headers
+ * - "one long line" exports by inserting newlines before student IDs
+ */
 function repairCsvText(text) {
-  let t = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  let t = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+
+  // Ensure StudentID header begins at a new line (report title may be before it)
   const headerIndex = t.indexOf("StudentID,");
   if (headerIndex > 0) {
     const before = t.slice(0, headerIndex).trim();
     const after = t.slice(headerIndex);
     t = before + "\n" + after;
   }
+
+  // If there are too few line breaks, attempt to break into rows before ID patterns
   const newlineCount = (t.match(/\n/g) || []).length;
   if (newlineCount < 5) {
     t = t.replace(/(\s)(\d{4,6},)/g, "\n$2");
   }
+
   return t;
 }
 
@@ -99,19 +138,40 @@ function subjectChipClass(pct, subjThresh) {
   return "ok";
 }
 
-/* ---------------------- JSON Loading ---------------------- */
+/* ---------------------- JSON Loading (safe) ---------------------- */
 
 async function loadJSON(path) {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`Failed to load ${path}`);
+  const res = await fetch(path, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${path} returned ${res.status}`);
   return await res.json();
 }
 
 async function initConfigs() {
-  // NOTE: If you open index.html directly (file://), fetch() might be blocked.
-  // Best practice: run a tiny local server (instructions below).
-  emailConfig = await loadJSON("data/email-templates.json");
-  subjectMap = await loadJSON("data/subject-map.json");
+  // Email templates
+  try {
+    emailConfig = await loadJSON("data/email-templates.json");
+    if (!emailConfig?.templates) {
+      setStatus("Email templates loaded but invalid (missing templates key).");
+      emailConfig = null;
+    } else {
+      setStatus("Email templates loaded ✅");
+    }
+  } catch (e) {
+    setStatus("Email templates not loaded (check /data/email-templates.json). Emails will be disabled.");
+    console.warn(e);
+    emailConfig = null;
+  }
+
+  // Subject map
+  try {
+    subjectMap = await loadJSON("data/subject-map.json");
+    if (!subjectMap || typeof subjectMap !== "object") subjectMap = {};
+    setStatus("Subject mappings loaded ✅");
+  } catch (e) {
+    setStatus("Subject mappings not loaded → using raw subject codes (check /data/subject-map.json).");
+    console.warn(e);
+    subjectMap = {};
+  }
 }
 
 /* ---------------------- Subject Mapping ---------------------- */
@@ -128,6 +188,7 @@ function normalizeData(rows) {
   if (!rows || !rows.length) return [];
   const headers = Object.keys(rows[0]);
 
+  // Detect blocks: Subject i, Attendance %, Stats...
   const subjectBlocks = [];
   for (let i = 1; i <= 12; i++) {
     const subjCol = `Subject ${i}`;
@@ -147,6 +208,7 @@ function normalizeData(rows) {
       studentId: id,
       lastName: String(r["LastName"] ?? "").trim(),
       firstName: String(r["FirstName"] ?? "").trim(),
+      gender: String(r["Gender"] ?? "").trim(),
       yearLevel: String(r["YearLevel"] ?? "").trim(),
       formClass: String(r["Form Class"] ?? "").trim(),
       timetableClass: String(r["Timetable Class"] ?? "").trim(),
@@ -154,6 +216,7 @@ function normalizeData(rows) {
       justified: parseMaybeNumber(r["Justified"]) ?? 0,
       unjustified: parseMaybeNumber(r["Unjustified"]) ?? 0,
       overseas: parseMaybeNumber(r["Overseas"]) ?? 0,
+      total: parseMaybeNumber(r["Total"]) ?? null,
       subjects: [],
     };
 
@@ -163,9 +226,10 @@ function normalizeData(rows) {
 
       const name = convertSubjectName(code);
       const attendance = parseMaybeNumber(r[b.attCol]);
-      const statsRaw = r[b.statsCol];
 
-      let open=null, unjust=null, all=null;
+      // Optional stats parsing if present
+      let open = null, unjust = null, all = null;
+      const statsRaw = r[b.statsCol];
       if (statsRaw !== null && statsRaw !== undefined && String(statsRaw).trim() !== "") {
         const parts = String(statsRaw).split("|").map(x => parseMaybeNumber(x));
         if (parts.length === 3) [open, unjust, all] = parts;
@@ -176,15 +240,17 @@ function normalizeData(rows) {
 
     out.push(s);
   }
+
   return out;
 }
 
-function populateYearFilter(students) {
-  const years = [...new Set(students.map(s => s.yearLevel).filter(Boolean))]
-    .sort((a,b)=>Number(a)-Number(b));
+function populateYearFilter(list) {
+  const years = [...new Set(list.map(s => s.yearLevel).filter(Boolean))]
+    .sort((a, b) => Number(a) - Number(b));
+
   els.year.innerHTML =
     `<option value="">All</option>` +
-    years.map(y => `<option value="${y}">${y}</option>`).join("");
+    years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join("");
 }
 
 /* ------------------------- Flagging ------------------------- */
@@ -196,27 +262,27 @@ function isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonFilters) {
   const missingSubject = s.subjects.some(sub => sub.attendance === null);
 
   return (reasonFilters.lowOverall && lowOverall) ||
-         (reasonFilters.highUnjust && highUnjust) ||
-         (reasonFilters.lowSubject && lowSubject) ||
-         (reasonFilters.missingSubject && missingSubject);
+    (reasonFilters.highUnjust && highUnjust) ||
+    (reasonFilters.lowSubject && lowSubject) ||
+    (reasonFilters.missingSubject && missingSubject);
 }
 
 function getReasons(s, overallThresh, subjThresh, unjustThresh) {
   const reasons = [];
 
   if (s.presentPct !== null && s.presentPct < overallThresh) {
-    reasons.push({type:"bad", text:`Low overall (${s.presentPct.toFixed(1)}%)`});
+    reasons.push({ type: "bad", text: `Low overall (${s.presentPct.toFixed(1)}%)` });
   }
 
   const lowSubs = s.subjects.filter(sub => sub.attendance !== null && sub.attendance < subjThresh);
-  if (lowSubs.length) reasons.push({type:"warn", text:`${lowSubs.length} low subject(s)`});
+  if (lowSubs.length) reasons.push({ type: "warn", text: `${lowSubs.length} low subject(s)` });
 
   const missing = s.subjects.filter(sub => sub.attendance === null);
-  if (missing.length) reasons.push({type:"watch", text:`Missing data (${missing.length})`});
+  if (missing.length) reasons.push({ type: "watch", text: `Missing data (${missing.length})` });
 
-  if ((s.unjustified || 0) >= unjustThresh) reasons.push({type:"bad", text:`Unjustified ${s.unjustified}`});
+  if ((s.unjustified || 0) >= unjustThresh) reasons.push({ type: "bad", text: `Unjustified ${s.unjustified}` });
 
-  if (!reasons.length) reasons.push({type:"good", text:"No flags"});
+  if (!reasons.length) reasons.push({ type: "good", text: "No flags" });
 
   return reasons;
 }
@@ -237,7 +303,11 @@ function severityPercent(score) {
   return Math.round((capped / 120) * 100);
 }
 
-/* ------------------------- Email templating ------------------------- */
+/* ------------------------- Email helpers (template-driven) ------------------------- */
+/**
+ * Still supports mailto buttons, but *all wording comes from email-templates.json*.
+ * If the json is missing or invalid, buttons are disabled.
+ */
 
 function joinLines(lines) {
   return (lines || []).join("\n");
@@ -246,11 +316,10 @@ function joinLines(lines) {
 function formatLowSubjectsBulletList(student, subjThresh) {
   const lowSubs = student.subjects
     .filter(s => s.attendance !== null && s.attendance < subjThresh)
-    .sort((a,b)=> (a.attendance ?? 999) - (b.attendance ?? 999))
+    .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
     .slice(0, 5);
 
   if (!lowSubs.length) return "• (No low subjects identified in this report)";
-
   return lowSubs.map(s => `• ${s.name}: ${s.attendance.toFixed(1)}%`).join("\n");
 }
 
@@ -258,9 +327,12 @@ function fillTemplate(text, vars) {
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] ?? ""));
 }
 
-function buildEmailFromTemplate(templateKey, student, subjThresh, toEmail) {
-  if (!emailConfig) throw new Error("Email templates not loaded.");
+function buildMailto(templateKey, student, subjThresh, toEmail) {
+  if (!emailConfig?.templates?.[templateKey]) {
+    return null;
+  }
 
+  const tpl = emailConfig.templates[templateKey];
   const schoolName = emailConfig.school?.name || "Pukekohe High School";
   const valuesLine = emailConfig.school?.valuesLine || "";
 
@@ -280,71 +352,27 @@ function buildEmailFromTemplate(templateKey, student, subjThresh, toEmail) {
     lowSubjectsBulletList
   };
 
-  const tpl = emailConfig.templates[templateKey];
   const subject = fillTemplate(tpl.subject, vars);
   const body = fillTemplate(joinLines(tpl.body), vars);
 
-  const mailto = `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  return { subject, body, mailto };
-}
-
-/* ---------------------- Settings persistence ---------------------- */
-
-function saveSettings() {
-  const settings = {
-    search: els.search.value ?? "",
-    year: els.year.value ?? "",
-    tier: els.tier.value ?? "",
-    sort: els.sort.value ?? "risk",
-    flagOnly: els.flagOnly.checked ?? false,
-
-    overallThreshold: Number(els.overallThreshold.value) || 80,
-    subjectThreshold: Number(els.subjectThreshold.value) || 80,
-    unjustThreshold: Number(els.unjustThreshold.value) || 10,
-    maxSubjects: Number(els.maxSubjects.value) || 5,
-
-    fLowOverall: els.fLowOverall.checked,
-    fHighUnjust: els.fHighUnjust.checked,
-    fLowSubject: els.fLowSubject.checked,
-    fMissingSubject: els.fMissingSubject.checked,
-
-    advancedOpen: els.advanced.open ?? false,
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-}
-
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const s = JSON.parse(raw);
-
-    if (typeof s.search === "string") els.search.value = s.search;
-    if (typeof s.year === "string") els.year.value = s.year;
-    if (typeof s.tier === "string") els.tier.value = s.tier;
-    if (typeof s.sort === "string") els.sort.value = s.sort;
-
-    if (typeof s.flagOnly === "boolean") els.flagOnly.checked = s.flagOnly;
-
-    if (typeof s.overallThreshold === "number") els.overallThreshold.value = s.overallThreshold;
-    if (typeof s.subjectThreshold === "number") els.subjectThreshold.value = s.subjectThreshold;
-    if (typeof s.unjustThreshold === "number") els.unjustThreshold.value = s.unjustThreshold;
-    if (typeof s.maxSubjects === "number") els.maxSubjects.value = s.maxSubjects;
-
-    if (typeof s.fLowOverall === "boolean") els.fLowOverall.checked = s.fLowOverall;
-    if (typeof s.fHighUnjust === "boolean") els.fHighUnjust.checked = s.fHighUnjust;
-    if (typeof s.fLowSubject === "boolean") els.fLowSubject.checked = s.fLowSubject;
-    if (typeof s.fMissingSubject === "boolean") els.fMissingSubject.checked = s.fMissingSubject;
-
-    if (typeof s.advancedOpen === "boolean") els.advanced.open = s.advancedOpen;
-  } catch (e) {
-    console.warn("Failed to load settings", e);
-  }
+  return `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 /* ---------------------------- Render ---------------------------- */
 
 function render() {
+  if (!students.length) {
+    els.empty.style.display = "block";
+    els.empty.textContent = "Upload a report to begin.";
+    els.grid.innerHTML = "";
+    els.statStudents.textContent = "0";
+    els.statFlagged.textContent = "0";
+    els.statRedOrange.textContent = "0";
+    els.statHighUnjust.textContent = "0";
+    els.statTitle.textContent = reportTitle || "—";
+    return;
+  }
+
   const q = els.search.value.trim().toLowerCase();
   const y = els.year.value;
   const tierFilter = els.tier.value;
@@ -364,7 +392,7 @@ function render() {
   };
 
   const anyReasonOn = Object.values(reasonFilters).some(v => v === true);
-  const reasonGate = anyReasonOn ? reasonFilters : { lowOverall:true, highUnjust:true, lowSubject:true, missingSubject:true };
+  const reasonGate = anyReasonOn ? reasonFilters : { lowOverall: true, highUnjust: true, lowSubject: true, missingSubject: true };
 
   let filtered = students.filter(s => {
     if (y && String(s.yearLevel) !== String(y)) return false;
@@ -385,7 +413,7 @@ function render() {
     return true;
   });
 
-  filtered.sort((a,b) => {
+  filtered.sort((a, b) => {
     if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
     if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
     if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
@@ -409,7 +437,7 @@ function render() {
   els.grid.innerHTML = "";
   if (!filtered.length) {
     els.empty.style.display = "block";
-    els.empty.textContent = students.length ? "No students match your filters." : "Upload a report to begin.";
+    els.empty.textContent = "No students match your filters.";
     return;
   }
   els.empty.style.display = "none";
@@ -428,7 +456,7 @@ function render() {
 
     const worstSubs = s.subjects
       .slice()
-      .sort((a,b)=> (a.attendance ?? 999) - (b.attendance ?? 999))
+      .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
       .slice(0, maxSubjects);
 
     const strip = worstSubs.map(sub => {
@@ -450,10 +478,14 @@ function render() {
     }).join("");
 
     const studentTo = `${s.studentId}@${ORG_DOMAIN}`;
-    const parentTo = ""; // intentionally blank
+    const parentTo = ""; // teacher pastes parent email from Bridge
 
-    const studentEmail = buildEmailFromTemplate("student_warning", s, subjThresh, studentTo);
-    const parentEmail = buildEmailFromTemplate("parent_inform", s, subjThresh, parentTo);
+    const mailtoStudent = buildMailto("student_warning", s, subjThresh, studentTo);
+    const mailtoParent = buildMailto("parent_inform", s, subjThresh, parentTo);
+
+    const bridgeUrl = bridgeUrlFor(s.studentId);
+
+    const emailDisabled = !mailtoStudent || !mailtoParent;
 
     const card = document.createElement("div");
     card.className = "card";
@@ -479,18 +511,28 @@ function render() {
 
       <div class="chips">${chips}</div>
 
-      <div class="mini">
-        <div class="pill"><div class="k">Unjustified</div><div class="v">${s.unjustified ?? 0}</div></div>
-        <div class="pill"><div class="k">Justified</div><div class="v">${s.justified ?? 0}</div></div>
-        <div class="pill"><div class="k">Subjects</div><div class="v">${s.subjects.length}</div></div>
-      </div>
-
       <div class="subjectStrip">${strip}</div>
 
       <div class="actions">
-        <a class="emailBtn" href="${studentEmail.mailto}" onclick="event.stopPropagation();">Email Student Check-in</a>
-        <a class="emailBtn secondary" href="${parentEmail.mailto}" onclick="event.stopPropagation();">Email Parent/Caregiver</a>
-        <span class="tiny">Student email: ${escapeHtml(studentTo)}</span>
+        <a class="emailBtn secondary" href="${bridgeUrl}" target="_blank" rel="noreferrer" onclick="event.stopPropagation();">
+          Open Bridge Profile
+        </a>
+
+        ${
+          emailDisabled
+            ? `<button class="emailBtn secondary" disabled onclick="event.stopPropagation();">Email Parent/Caregiver (templates missing)</button>`
+            : `<a class="emailBtn secondary" href="${mailtoParent}" onclick="event.stopPropagation();">Email Parent/Caregiver (paste address)</a>`
+        }
+
+        ${
+          emailDisabled
+            ? `<button class="emailBtn" disabled onclick="event.stopPropagation();">Email Student (templates missing)</button>`
+            : `<a class="emailBtn" href="${mailtoStudent}" onclick="event.stopPropagation();">Email Student Check-in</a>`
+        }
+
+        <span class="tiny">
+          Parent email: Open Bridge → copy address → Email Parent | Student: ${escapeHtml(studentTo)}
+        </span>
       </div>
 
       <div class="details">
@@ -502,147 +544,94 @@ function render() {
     card.addEventListener("click", () => card.classList.toggle("expanded"));
     els.grid.appendChild(card);
   }
-
-  saveSettings();
-}
-
-/* ---------------------- Export / Reset ---------------------- */
-
-function exportFlaggedCSV() {
-  const overallThresh = Number(els.overallThreshold.value) || 80;
-  const subjThresh = Number(els.subjectThreshold.value) || 80;
-  const unjustThresh = Number(els.unjustThreshold.value) || 10;
-
-  const reasonFilters = {
-    lowOverall: els.fLowOverall.checked,
-    highUnjust: els.fHighUnjust.checked,
-    lowSubject: els.fLowSubject.checked,
-    missingSubject: els.fMissingSubject.checked
-  };
-  const anyReasonOn = Object.values(reasonFilters).some(v => v === true);
-  const reasonGate = anyReasonOn ? reasonFilters : { lowOverall:true, highUnjust:true, lowSubject:true, missingSubject:true };
-
-  const flagged = students.filter(s => isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate));
-  const rows = flagged.map(s => ({
-    StudentID: s.studentId,
-    LastName: s.lastName,
-    FirstName: s.firstName,
-    YearLevel: s.yearLevel,
-    FormClass: s.formClass,
-    PresentPct: s.presentPct,
-    Unjustified: s.unjustified,
-    Justified: s.justified,
-    Overseas: s.overseas,
-    StudentEmail: `${s.studentId}@${ORG_DOMAIN}`
-  }));
-
-  const csv = Papa.unparse(rows);
-  const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "attendance_flagged.csv";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function resetAll() {
-  students = [];
-  reportTitle = "";
-  els.file.value = "";
-  els.search.value = "";
-  els.year.innerHTML = `<option value="">All</option>`;
-  els.export.disabled = true;
-  els.reset.disabled = true;
-  els.statTitle.textContent = "—";
-  render();
 }
 
 /* ---------------------- Wiring ---------------------- */
 
-els.closeAdvancedBtn.addEventListener("click", (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  els.advanced.open = false;
-  saveSettings();
-});
+function wireInputs() {
+  els.closeAdvancedBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    els.advanced.open = false;
+  });
 
-const rerenderInputs = [
-  els.search, els.year, els.tier, els.sort, els.flagOnly,
-  els.overallThreshold, els.subjectThreshold, els.unjustThreshold, els.maxSubjects,
-  els.fLowOverall, els.fHighUnjust, els.fLowSubject, els.fMissingSubject
-];
-
-rerenderInputs.forEach(el => {
-  el.addEventListener("input", render);
-  el.addEventListener("change", render);
-});
-
-els.advanced.addEventListener("toggle", saveSettings);
-els.export.addEventListener("click", exportFlaggedCSV);
-els.reset.addEventListener("click", resetAll);
-
-loadSettings();
+  [
+    els.search, els.year, els.tier, els.sort, els.flagOnly,
+    els.overallThreshold, els.subjectThreshold, els.unjustThreshold, els.maxSubjects,
+    els.fLowOverall, els.fHighUnjust, els.fLowSubject, els.fMissingSubject
+  ].forEach(el => {
+    if (!el) return;
+    el.addEventListener("input", render);
+    el.addEventListener("change", render);
+  });
+}
 
 /* ---------------------- File Upload ---------------------- */
 
-els.file.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+function wireFileUpload() {
+  if (!els.file) return;
 
-  let text = await file.text();
-  text = repairCsvText(text);
+  els.file.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  reportTitle = (text.split("\n")[0] ?? "").replace(/^"|"$/g, "").trim();
+    setStatus(`Loading file: ${file.name}...`);
 
-  const lines = text.split("\n");
-  let csvText = text;
-  if (lines.length > 1 && !lines[0].includes("StudentID") && lines[1].includes("StudentID")) {
-    csvText = lines.slice(1).join("\n");
-  }
+    try {
+      let text = await file.text();
+      text = repairCsvText(text);
 
-  Papa.parse(csvText, {
-    header: true,
-    skipEmptyLines: true,
-    complete: (results) => {
-      if (!results.data?.length) {
-        alert("No data rows found after repair. This report might be a different export.");
+      reportTitle = (text.split("\n")[0] ?? "").replace(/^"|"$/g, "").trim();
+
+      const lines = text.split("\n");
+      let csvText = text;
+      if (lines.length > 1 && !lines[0].includes("StudentID") && lines[1].includes("StudentID")) {
+        csvText = lines.slice(1).join("\n");
+      }
+
+      if (typeof Papa === "undefined") {
+        alert("PapaParse failed to load. Check internet / CDN blocked.");
         return;
       }
 
-      students = normalizeData(results.data);
-      populateYearFilter(students);
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (!results.data?.length) {
+            setStatus("Parsed 0 rows. The CSV may not match expected headers.");
+            alert("No data rows found after parsing. This report might be a different export.");
+            return;
+          }
 
-      els.export.disabled = false;
-      els.reset.disabled = false;
+          students = normalizeData(results.data);
+          populateYearFilter(students);
 
-      render();
-    },
-    error: (err) => {
+          setStatus(`Loaded ${students.length} students ✅`);
+          render();
+        },
+        error: (err) => {
+          console.error(err);
+          setStatus("CSV parse error (see console).");
+          alert("Could not parse CSV. Check file format.");
+        }
+      });
+
+    } catch (err) {
       console.error(err);
-      alert("Could not parse CSV. Check file format.");
+      setStatus("Failed to read file.");
+      alert("Failed to read file.");
     }
   });
-});
+}
 
-/* ---------------------- Startup ---------------------- */
+/* ---------------------- Start ---------------------- */
 
-(async function main(){
-  try {
-    await initConfigs();
-  } catch (err) {
-    // Helpful message if opened via file://
-    console.error(err);
-    alert(
-      "This dashboard needs to load JSON files.\n\n" +
-      "If you opened index.html directly, the browser may block JSON loading.\n\n" +
-      "Fix: run a tiny local server and open http://localhost:8000\n\n" +
-      "Windows: open cmd in this folder and run:  python -m http.server 8000\n" +
-      "Mac:      python3 -m http.server 8000\n"
-    );
-  }
+(async function main() {
+  setStatus("Starting...");
+  wireInputs();
+  wireFileUpload();
+  await initConfigs();
+  setStatus("Ready. Upload a CSV.");
   render();
 })();
-
