@@ -471,41 +471,130 @@ function exportFlaggedPDF_NoPopup() {
 
   const { overallThresh, subjThresh, unjustThresh } = thresholds;
 
-  const rowsHtml = list.map(s => {
+  // --- Build cards ---
+  const cardsHtml = list.map(s => {
     const tier = overallTier(s.presentPct);
+    const tierText = tierLabel(tier);
     const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
 
+    // Reasons (top 3)
+    const reasons = getReasons(s, overallThresh, subjThresh, unjustThresh)
+      .slice(0, 3)
+      .map(r => `<span class="print-pill ${r.type}">${escapeHtml(r.text)}</span>`)
+      .join("");
+
+    // Worst subjects under threshold
     const lowSubs = (s.subjects || [])
       .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
       .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
-      .slice(0, 6);
+      .slice(0, 5);
 
-    const lowSubsText = lowSubs.length
-      ? lowSubs.map(sub => `${escapeHtml(sub.name)} (${sub.attendance.toFixed(1)}%)`).join("<br>")
-      : `<span class="print-small">None</span>`;
+    const subRows = lowSubs.length
+      ? lowSubs.map(sub => `
+          <div class="subj">${escapeHtml(sub.name)}</div>
+          <div class="pct">${escapeHtml(sub.attendance.toFixed(1))}%</div>
+        `).join("")
+      : `
+        <div class="subj" style="grid-column:1 / -1; color:#333;">
+          No low subjects listed under ${subjThresh}% in this report.
+        </div>
+      `;
 
-    const link = bridgeUrlFor(s.studentId);
+    const bridgePath = `/students/student/${s.studentId}`;
 
     return `
-      <tr>
-        <td>
-          <strong>${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</strong><br>
-          <span class="print-small">ID: ${escapeHtml(s.studentId)} • Y${escapeHtml(s.yearLevel)} • ${escapeHtml(s.formClass || "—")}</span>
-        </td>
-        <td><span class="print-badge ${tier}">${escapeHtml(overall)}</span></td>
-        <td>${escapeHtml(String(s.unjustified ?? 0))}</td>
-        <td>${lowSubsText}</td>
-       <td><span class="print-small">Bridge: /students/student/${escapeHtml(s.studentId)}</span></td>
-      </tr>
+      <div class="print-card">
+        <div class="print-card-top">
+          <div class="print-student">
+            <p class="name">${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</p>
+            <div class="meta">
+              ID: <strong>${escapeHtml(s.studentId)}</strong> •
+              Year: <strong>${escapeHtml(s.yearLevel || "—")}</strong> •
+              Form: <strong>${escapeHtml(s.formClass || "—")}</strong><br>
+              Unjustified: <strong>${escapeHtml(String(s.unjustified ?? 0))}</strong>
+              • Justified: <strong>${escapeHtml(String(s.justified ?? 0))}</strong>
+            </div>
+          </div>
+
+          <div class="print-overall">
+            <div class="badge ${tier}">${escapeHtml(overall)}</div>
+            <div class="tier">${escapeHtml(tierText)}</div>
+          </div>
+        </div>
+
+        <div class="print-reasons">${reasons}</div>
+
+        <div class="print-subjects">
+          <h3>Lowest subjects (below ${subjThresh}%)</h3>
+          <div class="print-subject-list">
+            ${subRows}
+          </div>
+        </div>
+
+        <div class="print-footer">
+          <div>Bridge profile:</div>
+          <code>${escapeHtml(bridgePath)}</code>
+        </div>
+      </div>
     `;
   }).join("");
 
-  // Save original page HTML (so we can restore after printing)
+  // Save original page content so we can restore after printing
   const originalHtml = document.body.innerHTML;
   const originalTitle = document.title;
 
+  // --- Inline CSS so it ALWAYS applies (no caching issues) ---
+  const inlineCSS = `
+    @media print {
+      header, .controls, .toolbar, details, .empty, .grid, .actions, .installBtn, #grid, #empty {
+        display: none !important;
+      }
+      html, body { background:#fff !important; color:#111 !important; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-shadow:none !important; text-shadow:none !important; }
+    }
+
+    .print-page { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:#111; background:#fff; margin:0; padding:0; }
+    .print-header { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:12px; border-bottom:2px solid #111; padding-bottom:10px; }
+    .print-title h1 { margin:0; font-size:18px; letter-spacing:.2px; }
+    .print-title .sub { margin-top:4px; font-size:11px; line-height:1.4; color:#333; }
+    .print-metrics { text-align:right; font-size:11px; line-height:1.5; color:#333; }
+
+    .print-cards { display:grid; grid-template-columns:1fr; gap:10px; margin-top:12px; }
+    .print-card { border:2px solid #111; border-radius:12px; padding:10px 12px; page-break-inside:avoid; }
+    .print-card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .print-student .name { margin:0; font-size:14px; font-weight:900; line-height:1.2; }
+    .print-student .meta { margin-top:3px; font-size:11px; color:#333; line-height:1.35; }
+
+    .print-overall { text-align:right; }
+    .print-overall .badge { display:inline-block; font-weight:900; font-size:13px; padding:4px 10px; border-radius:999px; border:3px solid #111; white-space:nowrap; }
+    .print-overall .tier { margin-top:4px; font-size:11px; color:#333; font-weight:700; }
+
+    .print-overall .badge.bad { border-color:#c00; color:#c00; }
+    .print-overall .badge.warn { border-color:#d60; color:#d60; }
+    .print-overall .badge.watch { border-color:#a80; color:#a80; }
+    .print-overall .badge.good { border-color:#080; color:#080; }
+
+    .print-reasons { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .print-pill { font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px; border:2px solid #111; white-space:nowrap; }
+    .print-pill.bad { border-color:#c00; color:#c00; }
+    .print-pill.warn { border-color:#d60; color:#d60; }
+    .print-pill.watch { border-color:#a80; color:#a80; }
+    .print-pill.good { border-color:#080; color:#080; }
+
+    .print-subjects { margin-top:10px; border-top:1px solid #111; padding-top:8px; }
+    .print-subjects h3 { margin:0 0 6px 0; font-size:11px; letter-spacing:.2px; text-transform:uppercase; }
+    .print-subject-list { display:grid; grid-template-columns:1fr 80px; gap:4px 10px; font-size:11px; }
+    .print-subject-list .pct { text-align:right; font-weight:900; }
+
+    .print-footer { margin-top:8px; padding-top:8px; border-top:1px dashed #111; font-size:10.5px; color:#333; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    .print-footer code { font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:10.5px; color:#111; }
+
+    @page { size:A4; margin:12mm; }
+  `;
+
   document.title = "Flagged Attendance Report";
   document.body.innerHTML = `
+    <style>${inlineCSS}</style>
     <div class="print-page">
       <div class="print-header">
         <div class="print-title">
@@ -520,20 +609,11 @@ function exportFlaggedPDF_NoPopup() {
         </div>
       </div>
 
-      <table class="print-table">
-        <thead>
-          <tr>
-            <th style="width:26%;">Student</th>
-            <th style="width:10%;">Overall</th>
-            <th style="width:10%;">Unjustified</th>
-            <th style="width:34%;">Low Subjects (&lt; ${subjThresh}%)</th>
-            <th style="width:20%;">Bridge Profile</th>
-          </tr>
-        </thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
+      <div class="print-cards">
+        ${cardsHtml}
+      </div>
 
-      <p class="print-small" style="margin-top:12px;">
+      <p style="margin-top:12px;color:#333;font-size:11px;">
         Tip: Choose “Save as PDF” in the print dialog.
       </p>
     </div>
@@ -543,8 +623,7 @@ function exportFlaggedPDF_NoPopup() {
     document.body.innerHTML = originalHtml;
     document.title = originalTitle;
 
-    // Re-hook listeners + restore UI
-    cacheDom(); // safe re-cache (in case DOM changed)
+    cacheDom();
     wireInputs();
     wireFileUpload();
     render();
@@ -555,12 +634,13 @@ function exportFlaggedPDF_NoPopup() {
   setTimeout(() => {
     window.print();
 
-    // Fallback restore (some browsers don’t fire afterprint reliably)
+    // Fallback restore
     setTimeout(() => {
       try { restore(); } catch {}
     }, 900);
   }, 250);
 }
+
 
 /* ------------------------- Render ------------------------- */
 
@@ -911,4 +991,5 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
