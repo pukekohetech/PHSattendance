@@ -460,20 +460,22 @@ function buildFlaggedListForExport() {
 function exportFlaggedPDF_NoPopup() {
   const { list, thresholds } = buildFlaggedListForExport();
 
-  if (!list.length) {
+  if (!list || !list.length) {
     alert("No flagged students in the current view.");
     return;
   }
 
-  // Compact options
-  const MAX_LOW_SUBJECTS = 3;   // keeps cards short
-  const MAX_REASONS = 2;        // keeps pills short
+  // Compact choices
+  const MAX_LOW_SUBJECTS = 3;
+  const MAX_REASONS = 2;
 
   const now = new Date();
   const dateStr = now.toLocaleString();
   const report = reportTitle || "Attendance Report";
 
-  const { overallThresh, subjThresh, unjustThresh } = thresholds;
+  const overallThresh = thresholds?.overallThresh ?? (Number(els.overallThreshold.value) || 80);
+  const subjThresh = thresholds?.subjThresh ?? (Number(els.subjectThreshold.value) || 80);
+  const unjustThresh = thresholds?.unjustThresh ?? (Number(els.unjustThreshold.value) || 10);
 
   // Summary counts
   let criticalCount = 0;
@@ -487,33 +489,34 @@ function exportFlaggedPDF_NoPopup() {
     if ((s.unjustified || 0) >= unjustThresh) highUnjustCount++;
   }
 
-  // Build cards
-  const cardsHtml = list.map(s => {
+  // Build student cards HTML
+  const cardsHtml = list.map((s) => {
     const tier = overallTier(s.presentPct);
     const tierText = tierLabel(tier);
-    const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
 
-    const reasons = getReasons(s, overallThresh, subjThresh, unjustThresh)
+    const overall = (s.presentPct == null) ? "N/A" : `${s.presentPct.toFixed(1)}%`;
+
+    const reasonsArr = getReasons(s, overallThresh, subjThresh, unjustThresh)
       .filter(r => r.type !== "good")
-      .slice(0, MAX_REASONS)
-      .map(r => `<span class="print-pill ${r.type}">${escapeHtml(r.text)}</span>`)
-      .join("") || `<span class="print-pill watch">Flagged</span>`;
+      .slice(0, MAX_REASONS);
+
+    const reasonsHtml = reasonsArr.length
+      ? reasonsArr.map(r => `<span class="print-pill ${escapeHtml(r.type)}">${escapeHtml(r.text)}</span>`).join("")
+      : `<span class="print-pill watch">Flagged</span>`;
 
     const lowSubs = (s.subjects || [])
       .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
       .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
       .slice(0, MAX_LOW_SUBJECTS);
 
-    const subRows = lowSubs.length
-      ? lowSubs.map(sub => `
-          <div class="subj">${escapeHtml(sub.name)}</div>
-          <div class="pct">${escapeHtml(sub.attendance.toFixed(0))}%</div>
-        `).join("")
-      : `
-        <div class="subj" style="grid-column:1 / -1; color:#333;">
-          No low subjects below ${subjThresh}% in this report.
-        </div>
-      `;
+    const subRowsHtml = lowSubs.length
+      ? lowSubs.map(sub => {
+          const pct = (sub.attendance == null) ? "—" : `${sub.attendance.toFixed(0)}%`;
+          return `<div class="subj">${escapeHtml(sub.name)}</div><div class="pct">${escapeHtml(pct)}</div>`;
+        }).join("")
+      : `<div class="subj" style="grid-column:1 / -1; color:#333;">
+           No low subjects below ${escapeHtml(String(subjThresh))}% in this report.
+         </div>`;
 
     return `
       <div class="print-card">
@@ -529,28 +532,28 @@ function exportFlaggedPDF_NoPopup() {
           </div>
 
           <div class="print-overall">
-            <div class="badge ${tier}">${escapeHtml(overall)}</div>
+            <div class="badge ${escapeHtml(tier)}">${escapeHtml(overall)}</div>
             <div class="tier">${escapeHtml(tierText)}</div>
           </div>
         </div>
 
-        <div class="print-reasons">${reasons}</div>
+        <div class="print-reasons">${reasonsHtml}</div>
 
         <div class="print-subjects">
-          <h3>Lowest subjects (below ${subjThresh}%)</h3>
+          <h3>Lowest subjects (below ${escapeHtml(String(subjThresh))}%)</h3>
           <div class="print-subject-list">
-            ${subRows}
+            ${subRowsHtml}
           </div>
         </div>
       </div>
     `;
   }).join("");
 
-  // Save app DOM to restore later
+  // Save original state so we can restore after printing
   const originalHtml = document.body.innerHTML;
   const originalTitle = document.title;
 
-  // Replace body with print-only markup (styles come from styles.css)
+  // Replace body with print-only markup
   document.title = "Flagged Attendance Report";
   document.body.innerHTML = `
     <div class="print-page">
@@ -560,17 +563,17 @@ function exportFlaggedPDF_NoPopup() {
           <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
 
           <div class="print-summary">
-            <span class="print-kpi bad">Critical: ${criticalCount}</span>
-            <span class="print-kpi warn">Concern: ${concernCount}</span>
-            <span class="print-kpi watch">High unjustified: ${highUnjustCount}</span>
+            <span class="print-kpi bad">Critical: ${escapeHtml(String(criticalCount))}</span>
+            <span class="print-kpi warn">Concern: ${escapeHtml(String(concernCount))}</span>
+            <span class="print-kpi watch">High unjustified: ${escapeHtml(String(highUnjustCount))}</span>
           </div>
         </div>
 
         <div class="print-metrics">
-          <div><strong>${list.length}</strong> flagged students</div>
-          <div>Overall: ${overallThresh}%</div>
-          <div>Subject: ${subjThresh}%</div>
-          <div>Unjustified: ${unjustThresh}+</div>
+          <div><strong>${escapeHtml(String(list.length))}</strong> flagged students</div>
+          <div>Overall: ${escapeHtml(String(overallThresh))}%</div>
+          <div>Subject: ${escapeHtml(String(subjThresh))}%</div>
+          <div>Unjustified: ${escapeHtml(String(unjustThresh))}+</div>
         </div>
       </div>
 
@@ -584,9 +587,12 @@ function exportFlaggedPDF_NoPopup() {
     </div>
   `;
 
+  // Restore app after printing
   const restore = () => {
     document.body.innerHTML = originalHtml;
     document.title = originalTitle;
+
+    // Re-cache DOM and re-wire (important after innerHTML swap)
     cacheDom();
     wireInputs();
     wireFileUpload();
@@ -595,16 +601,24 @@ function exportFlaggedPDF_NoPopup() {
 
   window.addEventListener("afterprint", restore, { once: true });
 
-  // Print
+  // Print (delay ensures DOM is ready)
   setTimeout(() => {
-    window.print();
+    try {
+      window.print();
+    } catch (err) {
+      console.error(err);
+      alert("Printing failed. Check pop-up / print permissions.");
+      restore();
+      return;
+    }
 
-    // Fallback restore (some devices don’t fire afterprint)
+    // Fallback restore if afterprint fails
     setTimeout(() => {
       try { restore(); } catch {}
-    }, 900);
-  }, 250);
+    }, 1000);
+  }, 300);
 }
+
 
 
 /* ------------------------- Render ------------------------- */
@@ -956,6 +970,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
