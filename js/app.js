@@ -2,7 +2,7 @@
 const ORG_DOMAIN = "pukekohehigh.school.nz";
 const STORAGE_KEY = "attendance_dashboard_settings_v5";
 
-// Your Bridge student page pattern (Option A)
+// Bridge student page URL pattern
 function bridgeUrlFor(studentId) {
   return `https://pukekohe.bridge.school.nz/students/student/${encodeURIComponent(studentId)}`;
 }
@@ -151,13 +151,13 @@ async function initConfigs() {
   try {
     emailConfig = await loadJSON("data/email-templates.json");
     if (!emailConfig?.templates) {
-      setStatus("Email templates loaded but invalid (missing templates key).");
+      setStatus("Email templates loaded but invalid (missing templates key). Emails disabled.");
       emailConfig = null;
     } else {
       setStatus("Email templates loaded ✅");
     }
   } catch (e) {
-    setStatus("Email templates not loaded (check /data/email-templates.json). Emails will be disabled.");
+    setStatus("Email templates not loaded (check /data/email-templates.json). Emails disabled.");
     console.warn(e);
     emailConfig = null;
   }
@@ -168,7 +168,7 @@ async function initConfigs() {
     if (!subjectMap || typeof subjectMap !== "object") subjectMap = {};
     setStatus("Subject mappings loaded ✅");
   } catch (e) {
-    setStatus("Subject mappings not loaded → using raw subject codes (check /data/subject-map.json).");
+    setStatus("Subject mappings not loaded → using raw subject codes.");
     console.warn(e);
     subjectMap = {};
   }
@@ -304,28 +304,22 @@ function severityPercent(score) {
 }
 
 /* ------------------------- Email helpers (template-driven) ------------------------- */
-/**
- * Still supports mailto buttons, but *all wording comes from email-templates.json*.
- * If the json is missing or invalid, buttons are disabled.
- */
+
 function openParentEmailViaBridge({ bridgeUrl, mailtoParent }) {
-  // 1) Always open Bridge in a new tab (allowed from click)
+  // Open Bridge first (always)
   window.open(bridgeUrl, "_blank", "noopener,noreferrer");
 
-  // 2) Try to open the mailto (Outlook). Some browsers allow it, some block it.
-  // Using setTimeout often helps Chrome treat it as part of the user action.
+  // Then try open Outlook mailto
   setTimeout(() => {
     try {
       window.location.href = mailtoParent;
     } catch (e) {
-      // If blocked, fallback
       alert(
-        "Bridge profile opened.\n\nYour browser blocked the email window.\nPlease click the button again, or use the Email Parent button."
+        "Bridge profile opened.\n\nYour browser blocked the email window.\nPlease click the button again."
       );
     }
   }, 150);
 }
-
 
 function joinLines(lines) {
   return (lines || []).join("\n");
@@ -346,12 +340,11 @@ function fillTemplate(text, vars) {
 }
 
 function buildMailto(templateKey, student, subjThresh, toEmail) {
-  if (!emailConfig?.templates?.[templateKey]) {
-    return null;
-  }
+  if (!emailConfig?.templates?.[templateKey]) return null;
 
   const tpl = emailConfig.templates[templateKey];
-  const schoolName = emailConfig.school?.name || "Pukekohe High School";
+
+  const schoolName = emailConfig.school?.name || "";
   const valuesLine = emailConfig.school?.valuesLine || "";
 
   const overallPct = (student.presentPct === null) ? "N/A" : `${student.presentPct.toFixed(1)}%`;
@@ -410,7 +403,9 @@ function render() {
   };
 
   const anyReasonOn = Object.values(reasonFilters).some(v => v === true);
-  const reasonGate = anyReasonOn ? reasonFilters : { lowOverall: true, highUnjust: true, lowSubject: true, missingSubject: true };
+  const reasonGate = anyReasonOn
+    ? reasonFilters
+    : { lowOverall: true, highUnjust: true, lowSubject: true, missingSubject: true };
 
   let filtered = students.filter(s => {
     if (y && String(s.yearLevel) !== String(y)) return false;
@@ -502,21 +497,12 @@ function render() {
     const mailtoParent = buildMailto("parent_inform", s, subjThresh, parentTo);
 
     const bridgeUrl = bridgeUrlFor(s.studentId);
-
-    const emailDisabled = !mailtoStudent || !mailtoParent;
+    const canEmail = !!mailtoParent && !!mailtoStudent;
 
     const card = document.createElement("div");
     card.className = "card";
 
     card.innerHTML = `
-    const parentBtn = card.querySelector('[data-action="parent-via-bridge"]');
-if (parentBtn && mailtoParent) {
-  parentBtn.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    openParentEmailViaBridge({ bridgeUrl, mailtoParent });
-  });
-}
-
       <div class="severity">
         <div class="fill ${sevClass}" style="width:${sev}%;"></div>
       </div>
@@ -539,64 +525,50 @@ if (parentBtn && mailtoParent) {
 
       <div class="subjectStrip">${strip}</div>
 
-const canEmail = !!mailtoParent && !!mailtoStudent;
+      <div class="actions">
+        ${
+          canEmail
+            ? `<button class="emailBtn secondary" type="button" data-action="parent-via-bridge">
+                 Email Parent (via Bridge)
+               </button>`
+            : `<button class="emailBtn secondary" disabled type="button">
+                 Email Parent (templates missing)
+               </button>`
+        }
 
-card.innerHTML = `
-  <div class="severity">
-    <div class="fill ${sevClass}" style="width:${sev}%;"></div>
-  </div>
+        ${
+          mailtoStudent
+            ? `<a class="emailBtn" href="${mailtoStudent}" onclick="event.stopPropagation();">
+                 Email Student Check-in
+               </a>`
+            : `<button class="emailBtn" disabled type="button">
+                 Email Student (templates missing)
+               </button>`
+        }
 
-  <div class="toprow">
-    <div>
-      <div class="name">${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</div>
-      <div class="meta">
-        ID: ${escapeHtml(s.studentId)} • Y${escapeHtml(s.yearLevel)} • ${escapeHtml(s.formClass || "—")}
+        <a class="emailBtn secondary" href="${bridgeUrl}" target="_blank" rel="noreferrer" onclick="event.stopPropagation();">
+          Open Bridge Profile
+        </a>
+
+        <span class="tiny">
+          Parent email: click “Email Parent (via Bridge)” → copy email from Bridge → paste into Outlook → send
+        </span>
       </div>
-      <div class="tierLabel ${tier}">
-        <span class="tierDot"></span> ${escapeHtml(tierText)}
+
+      <div class="details">
+        <h4>Worst ${maxSubjects} subjects (click card to collapse)</h4>
+        ${detailsHtml || `<div class="empty" style="box-shadow:none;">No subject data found.</div>`}
       </div>
-    </div>
+    `;
 
-    <div class="badge ${tier}">${escapeHtml(overall)}</div>
-  </div>
-
-  <div class="chips">${chips}</div>
-
-  <div class="subjectStrip">${strip}</div>
-
-  <div class="actions">
-    ${
-      canEmail
-        ? `<button class="emailBtn secondary" type="button" data-action="parent-via-bridge">
-             Email Parent (via Bridge)
-           </button>`
-        : `<button class="emailBtn secondary" disabled type="button">
-             Email Parent (templates missing)
-           </button>`
+    // Wire up the single-button workflow
+    const parentBtn = card.querySelector('[data-action="parent-via-bridge"]');
+    if (parentBtn && mailtoParent) {
+      parentBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        openParentEmailViaBridge({ bridgeUrl, mailtoParent });
+      });
     }
-
-    <a class="emailBtn" href="${mailtoStudent || "#"}"
-       onclick="event.stopPropagation(); ${mailtoStudent ? "" : "return false;"}"
-       ${mailtoStudent ? "" : "aria-disabled='true' style='opacity:0.5; pointer-events:none;'"}>
-      Email Student Check-in
-    </a>
-
-    <a class="emailBtn secondary" href="${bridgeUrl}" target="_blank" rel="noreferrer"
-       onclick="event.stopPropagation();">
-      Open Bridge Profile
-    </a>
-
-    <span class="tiny">
-      Parent email: click “Email Parent (via Bridge)” → copy email from Bridge → send
-    </span>
-  </div>
-
-  <div class="details">
-    <h4>Worst ${maxSubjects} subjects (click card to collapse)</h4>
-    ${detailsHtml || `<div class="empty" style="box-shadow:none;">No subject data found.</div>`}
-  </div>
-`;
-
 
     card.addEventListener("click", () => card.classList.toggle("expanded"));
     els.grid.appendChild(card);
@@ -642,6 +614,8 @@ function wireFileUpload() {
 
       const lines = text.split("\n");
       let csvText = text;
+
+      // If first line is title and second line contains StudentID header
       if (lines.length > 1 && !lines[0].includes("StudentID") && lines[1].includes("StudentID")) {
         csvText = lines.slice(1).join("\n");
       }
@@ -692,6 +666,3 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
-
-
-
