@@ -572,7 +572,7 @@ function render() {
         ${
           canEmail
             ? `<button class="emailBtn secondary" type="button" data-action="parent-via-bridge">
-                 Email Parent (via Bridge)
+                 Email Parent
                </button>`
             : `<button class="emailBtn secondary" disabled type="button">
                  Email Parent (templates missing)
@@ -709,4 +709,5 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
