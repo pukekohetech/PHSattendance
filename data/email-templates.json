@@ -5,9 +5,9 @@
       "Manaakitanga",
       "Kotahitanga",
       "Arahitanga",
-      "Pūmau(tanga)"
+      "Pūmautanga"
     ],
-    "valuesLine": "Manaakitanga • Kotahitanga • Arahitanga • Pūmau(tanga)"
+    "valuesLine": "Manaakitanga • Kotahitanga • Arahitanga • Pūmautanga"
   },
 
   "templates": {
@@ -16,18 +16,18 @@
       "body": [
         "Kia ora {{firstName}},",
         "",
-        "This is a friendly check-in about your attendance. At Pukekohe High School we want to support you to be successful, and regular attendance is a key part of that (Manaakitanga).",
+        "We’re checking in with you about your attendance. At Pukekohe High School, your presence and participation are important — being here consistently helps you grow, learn, and succeed.",
         "",
-        "Your attendance summary:",
+        "Your current attendance summary:",
         "• Overall attendance: {{overallPct}}",
         "• Unjustified absences: {{unjustified}}",
         "",
-        "Subjects with the lowest attendance in this report:",
+        "Subjects where your attendance has been lowest:",
         "{{lowSubjectsBulletList}}",
         "",
-        "If there’s anything getting in the way of you being at school, please talk with your teacher, form teacher, or Dean. We can work together to support you (Kotahitanga).",
+        "If something is making it hard to be at school, please reach out to your teacher, form teacher, or Dean. We’re here to listen and support you with care and respect.",
         "",
-        "We know you can make positive choices from here (Arahitanga), and consistency will make a real difference (Pūmau(tanga)).",
+        "You have the ability to step up and take charge of your learning. We know you can make strong choices, stay committed, and keep moving forward.",
         "",
         "Ngā mihi,",
         "{{schoolName}}",
@@ -40,9 +40,9 @@
       "body": [
         "Kia ora Parent/Caregiver,",
         "",
-        "We are getting in touch to let you know that {{firstName}} {{lastName}}’s attendance is currently a concern. At Pukekohe High School, we aim to support every student to succeed through care, partnership and consistency (Manaakitanga, Kotahitanga, Pūmau(tanga)).",
+        "We are writing to inform you that {{firstName}} {{lastName}}’s attendance is currently below the expected level. At Pukekohe High School, we are committed to working together with whānau to support each student’s progress and wellbeing.",
         "",
-        "Student details:",
+        "Student information:",
         "• Student: {{firstName}} {{lastName}} ({{studentId}})",
         "• Year level: {{yearLevel}}",
         "• Form class: {{formClass}}",
@@ -51,14 +51,14 @@
         "• Overall attendance: {{overallPct}}",
         "• Unjustified absences: {{unjustified}}",
         "",
-        "Subjects with the lowest attendance in this report:",
+        "Subjects where attendance is lowest:",
         "{{lowSubjectsBulletList}}",
         "",
-        "Regular attendance is important for learning progress and wellbeing. If there are circumstances affecting attendance, please reply to this email or contact the school so we can work together to support your child (Kotahitanga).",
+        "We believe that strong relationships and regular routines are key to student success. If there are challenges affecting your child’s attendance, please get in touch so we can work in partnership to support them.",
         "",
-        "Thank you for helping us reinforce positive routines and commitment to learning (Pūmau(tanga)).",
+        "Your support plays an important role in helping {{firstName}} build habits of responsibility, perseverance, and pride in their learning.",
         "",
-        "Ngā mihi,",
+        "Ngā mihi nui,",
         "{{schoolName}}",
         "{{valuesLine}}"
       ]
