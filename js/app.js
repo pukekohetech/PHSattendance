@@ -413,10 +413,23 @@ function render() {
       if (t !== tierFilter) return false;
     }
 
-    if (q) {
-      const hay = `${s.lastName} ${s.firstName} ${s.studentId} ${s.formClass} ${s.timetableClass}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+if (q) {
+  const subjectHay = (s.subjects || [])
+    .map(sub => `${sub.code} ${sub.name}`)
+    .join(" ");
+
+  const hay = `
+    ${s.lastName}
+    ${s.firstName}
+    ${s.studentId}
+    ${s.yearLevel}
+    ${s.formClass}
+    ${s.timetableClass}
+    ${subjectHay}
+  `.toLowerCase();
+
+  if (!hay.includes(q)) return false;
+}
 
     const flagged = isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate);
     if (flaggedOnly && !flagged) return false;
@@ -656,3 +669,4 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
