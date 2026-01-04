@@ -305,21 +305,64 @@ function severityPercent(score) {
 
 /* ------------------------- Email helpers (template-driven) ------------------------- */
 
-function openParentEmailViaBridge({ bridgeUrl, mailtoParent }) {
-  // Open Bridge first (always)
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (err) {
+    // Fallback for older browsers / permissions issues
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "absolute";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    } catch (e2) {
+      console.warn("Clipboard copy failed:", e2);
+      return false;
+    }
+  }
+}
+
+/**
+ * Email Parent button:
+ * - Opens Bridge profile
+ * - Copies the mailto link to clipboard
+ * - Attempts to open the mailto
+ */
+async function emailParentAction({ bridgeUrl, mailtoParent }) {
+  // Open Bridge in a new tab
   window.open(bridgeUrl, "_blank", "noopener,noreferrer");
 
-  // Then try open Outlook mailto
+  // Copy mailto link to clipboard
+  const copied = await copyToClipboard(mailtoParent);
+
+  // Try to open Outlook / mail app
   setTimeout(() => {
     try {
       window.location.href = mailtoParent;
     } catch (e) {
-      alert(
-        "Bridge profile opened.\n\nYour browser blocked the email window.\nPlease click the button again."
-      );
+      // ignore (popup blocker / policy)
     }
   }, 150);
+
+  // Optional: notify the teacher
+  if (copied) {
+    alert(
+      "✅ Email link copied!\n\nBridge profile opened.\n\nIf Outlook didn’t open automatically, paste the copied link into your browser address bar to open the email template."
+    );
+  } else {
+    alert(
+      "Bridge profile opened.\n\nWe couldn’t copy the email link automatically.\nIf Outlook didn’t open, click the button again."
+    );
+  }
 }
+
 
 function joinLines(lines) {
   return (lines || []).join("\n");
@@ -666,3 +709,4 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
