@@ -651,6 +651,118 @@ function buildFlaggedListForExport() {
     thresholds: { overallThresh, subjThresh, unjustThresh }
   };
 }
+function exportFlaggedPDF() {
+  const { list, thresholds } = buildFlaggedListForExport();
+
+  if (!list.length) {
+    alert("No flagged students in the current view.");
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = now.toLocaleString();
+
+  const report = reportTitle || "Attendance Report";
+  const { overallThresh, subjThresh, unjustThresh } = thresholds;
+
+  // Build table rows
+  const rowsHtml = list.map(s => {
+    const tier = overallTier(s.presentPct);
+    const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
+
+    const lowSubs = (s.subjects || [])
+      .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
+      .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
+      .slice(0, 6);
+
+    const lowSubsText = lowSubs.length
+      ? lowSubs.map(sub => `${escapeHtml(sub.name)} (${sub.attendance.toFixed(1)}%)`).join("<br>")
+      : `<span class="print-small">None</span>`;
+
+    const link = bridgeUrlFor(s.studentId);
+
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</strong><br>
+          <span class="print-small">ID: ${escapeHtml(s.studentId)} • Y${escapeHtml(s.yearLevel)} • ${escapeHtml(s.formClass || "—")}</span>
+        </td>
+        <td><span class="print-badge ${tier}">${escapeHtml(overall)}</span></td>
+        <td>${escapeHtml(String(s.unjustified ?? 0))}</td>
+        <td>${lowSubsText}</td>
+        <td>
+          <a class="print-link" href="${link}" target="_blank" rel="noreferrer">${link}</a>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  // Pull in your current stylesheet for consistent fonts
+  const cssHref = document.querySelector('link[rel="stylesheet"]')?.getAttribute("href") || "styles.css";
+
+  const html = `
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Flagged Attendance Report</title>
+      <link rel="stylesheet" href="${cssHref}">
+    </head>
+    <body>
+      <div class="print-page">
+        <div class="print-header">
+          <div class="print-title">
+            <h1>Flagged Attendance Report</h1>
+            <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
+          </div>
+          <div class="print-metrics">
+            <div><strong>${list.length}</strong> flagged students</div>
+            <div>Overall threshold: ${overallThresh}%</div>
+            <div>Subject threshold: ${subjThresh}%</div>
+            <div>Unjustified threshold: ${unjustThresh}</div>
+          </div>
+        </div>
+
+        <table class="print-table">
+          <thead>
+            <tr>
+              <th style="width:26%;">Student</th>
+              <th style="width:10%;">Overall</th>
+              <th style="width:10%;">Unjustified</th>
+              <th style="width:34%;">Low Subjects (&lt; ${subjThresh}%)</th>
+              <th style="width:20%;">Bridge Profile</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <p class="print-small" style="margin-top:12px;">
+          Tip: Use Print → “Save as PDF”. This report includes Bridge links for quick follow-up.
+        </p>
+      </div>
+
+      <script>
+        // Auto open print dialog when the page is ready
+        window.addEventListener("load", () => {
+          setTimeout(() => window.print(), 250);
+        });
+      </script>
+    </body>
+    </html>
+  `;
+
+  const win = window.open("", "_blank", "noopener,noreferrer");
+  if (!win) {
+    alert("Pop-up blocked. Please allow pop-ups for this site to export PDF.");
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
 
 
 function wireInputs() {
@@ -742,5 +854,6 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
