@@ -308,6 +308,24 @@ function severityPercent(score) {
  * Still supports mailto buttons, but *all wording comes from email-templates.json*.
  * If the json is missing or invalid, buttons are disabled.
  */
+function openParentEmailViaBridge({ bridgeUrl, mailtoParent }) {
+  // 1) Always open Bridge in a new tab (allowed from click)
+  window.open(bridgeUrl, "_blank", "noopener,noreferrer");
+
+  // 2) Try to open the mailto (Outlook). Some browsers allow it, some block it.
+  // Using setTimeout often helps Chrome treat it as part of the user action.
+  setTimeout(() => {
+    try {
+      window.location.href = mailtoParent;
+    } catch (e) {
+      // If blocked, fallback
+      alert(
+        "Bridge profile opened.\n\nYour browser blocked the email window.\nPlease click the button again, or use the Email Parent button."
+      );
+    }
+  }, 150);
+}
+
 
 function joinLines(lines) {
   return (lines || []).join("\n");
@@ -635,3 +653,4 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
