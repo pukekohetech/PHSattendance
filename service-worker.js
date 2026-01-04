@@ -3,7 +3,7 @@
 // NOTE: User-uploaded CSV data cannot be cached by the SW (browser security) —
 // but the dashboard itself will work offline once installed.
 
-const CACHE_NAME = "phs-attendance-pwa-v2";
+const CACHE_NAME = "phs-attendance-pwa-v3";
 
 const APP_SHELL = [
   "./",
@@ -77,4 +77,5 @@ self.addEventListener("fetch", (event) => {
     })()
   );
 });
+
 
