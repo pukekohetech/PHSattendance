@@ -1,6 +1,6 @@
 // js/app.js
 const ORG_DOMAIN = "pukekohehigh.school.nz";
-const STORAGE_KEY = "attendance_dashboard_settings_v5";
+const STORAGE_KEY = "attendance_dashboard_settings_v6";
 
 // Bridge student page URL pattern
 function bridgeUrlFor(studentId) {
@@ -56,7 +56,7 @@ const els = {
   statTitle: document.getElementById("statTitle"),
 };
 
-// A small status banner (helps diagnose GitHub Pages issues)
+// Status banner (helps diagnose GitHub Pages issues)
 const statusBar = document.createElement("div");
 statusBar.style.maxWidth = "1200px";
 statusBar.style.margin = "0 auto";
@@ -90,11 +90,6 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-/**
- * Repairs:
- * - report title line above headers
- * - "one long line" exports by inserting newlines before student IDs
- */
 function repairCsvText(text) {
   let t = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 
@@ -151,13 +146,13 @@ async function initConfigs() {
   try {
     emailConfig = await loadJSON("data/email-templates.json");
     if (!emailConfig?.templates) {
-      setStatus("Email templates loaded but invalid (missing templates key). Emails disabled.");
+      setStatus("Email templates loaded but invalid (missing templates key). Parent/Student copy disabled.");
       emailConfig = null;
     } else {
       setStatus("Email templates loaded ✅");
     }
   } catch (e) {
-    setStatus("Email templates not loaded (check /data/email-templates.json). Emails disabled.");
+    setStatus("Email templates not loaded (check /data/email-templates.json). Parent/Student copy disabled.");
     console.warn(e);
     emailConfig = null;
   }
@@ -188,7 +183,6 @@ function normalizeData(rows) {
   if (!rows || !rows.length) return [];
   const headers = Object.keys(rows[0]);
 
-  // Detect blocks: Subject i, Attendance %, Stats...
   const subjectBlocks = [];
   for (let i = 1; i <= 12; i++) {
     const subjCol = `Subject ${i}`;
@@ -227,7 +221,6 @@ function normalizeData(rows) {
       const name = convertSubjectName(code);
       const attendance = parseMaybeNumber(r[b.attCol]);
 
-      // Optional stats parsing if present
       let open = null, unjust = null, all = null;
       const statsRaw = r[b.statsCol];
       if (statsRaw !== null && statsRaw !== undefined && String(statsRaw).trim() !== "") {
@@ -303,14 +296,14 @@ function severityPercent(score) {
   return Math.round((capped / 120) * 100);
 }
 
-/* ------------------------- Email helpers (template-driven) ------------------------- */
+/* ------------------------- Clipboard helpers ------------------------- */
 
 async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
     return true;
   } catch (err) {
-    // Fallback for older browsers / permissions issues
+    // Fallback
     try {
       const ta = document.createElement("textarea");
       ta.value = text;
@@ -329,40 +322,7 @@ async function copyToClipboard(text) {
   }
 }
 
-/**
- * Email Parent button:
- * - Opens Bridge profile
- * - Copies the mailto link to clipboard
- * - Attempts to open the mailto
- */
-async function emailParentAction({ bridgeUrl, mailtoParent }) {
-  // Open Bridge in a new tab
-  window.open(bridgeUrl, "_blank", "noopener,noreferrer");
-
-  // Copy mailto link to clipboard
-  const copied = await copyToClipboard(mailtoParent);
-
-  // Try to open Outlook / mail app
-  setTimeout(() => {
-    try {
-      window.location.href = mailtoParent;
-    } catch (e) {
-      // ignore (popup blocker / policy)
-    }
-  }, 150);
-
-  // Optional: notify the teacher
-  if (copied) {
-    alert(
-      "✅ Email link copied!\n\nBridge profile opened.\n\nIf Outlook didn’t open automatically, paste the copied link into your browser address bar to open the email template."
-    );
-  } else {
-    alert(
-      "Bridge profile opened.\n\nWe couldn’t copy the email link automatically.\nIf Outlook didn’t open, click the button again."
-    );
-  }
-}
-
+/* ------------------------- Template-driven email text ------------------------- */
 
 function joinLines(lines) {
   return (lines || []).join("\n");
@@ -382,7 +342,11 @@ function fillTemplate(text, vars) {
   return text.replace(/\{\{(\w+)\}\}/g, (_, key) => (vars[key] ?? ""));
 }
 
-function buildMailto(templateKey, student, subjThresh, toEmail) {
+/**
+ * Build subject + body text from template JSON.
+ * Returns { subject, body } or null if missing template.
+ */
+function buildEmailText(templateKey, student, subjThresh) {
   if (!emailConfig?.templates?.[templateKey]) return null;
 
   const tpl = emailConfig.templates[templateKey];
@@ -409,7 +373,45 @@ function buildMailto(templateKey, student, subjThresh, toEmail) {
   const subject = fillTemplate(tpl.subject, vars);
   const body = fillTemplate(joinLines(tpl.body), vars);
 
-  return `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return { subject, body };
+}
+
+/**
+ * Parent email button action:
+ * - Opens Bridge profile
+ * - Copies "SUBJECT + BODY" to clipboard, ready to paste into Outlook
+ *
+ * Teacher then clicks the mailto link on Bridge and pastes subject/body.
+ */
+async function emailParentCopyAction({ bridgeUrl, subject, body }) {
+  // Open Bridge
+  window.open(bridgeUrl, "_blank", "noopener,noreferrer");
+
+  // Copy payload for paste
+  const payload = `Subject: ${subject}\n\n${body}`;
+  const ok = await copyToClipboard(payload);
+
+  if (ok) {
+    alert("✅ Copied email subject + body to clipboard.\n\nNow copy parent email from Bridge and paste into Outlook.");
+  } else {
+    alert("Bridge opened.\n\nCopy failed. Please try again (browser clipboard permissions).");
+  }
+}
+
+/**
+ * Student email button action:
+ * - Copies "SUBJECT + BODY" to clipboard
+ * - (Optional) teacher clicks mailto student address themselves
+ */
+async function emailStudentCopyAction({ subject, body }) {
+  const payload = `Subject: ${subject}\n\n${body}`;
+  const ok = await copyToClipboard(payload);
+
+  if (ok) {
+    alert("✅ Copied email subject + body to clipboard.\n\nNow open a new email to the student and paste.");
+  } else {
+    alert("Copy failed. Please try again (browser clipboard permissions).");
+  }
 }
 
 /* ---------------------------- Render ---------------------------- */
@@ -533,14 +535,14 @@ function render() {
       `;
     }).join("");
 
-    const studentTo = `${s.studentId}@${ORG_DOMAIN}`;
-    const parentTo = ""; // teacher pastes parent email from Bridge
-
-    const mailtoStudent = buildMailto("student_warning", s, subjThresh, studentTo);
-    const mailtoParent = buildMailto("parent_inform", s, subjThresh, parentTo);
-
     const bridgeUrl = bridgeUrlFor(s.studentId);
-    const canEmail = !!mailtoParent && !!mailtoStudent;
+
+    // Build template text for copy actions
+    const parentText = buildEmailText("parent_inform", s, subjThresh);
+    const studentText = buildEmailText("student_warning", s, subjThresh);
+
+    const parentCopyEnabled = !!parentText;
+    const studentCopyEnabled = !!studentText;
 
     const card = document.createElement("div");
     card.className = "card";
@@ -570,21 +572,21 @@ function render() {
 
       <div class="actions">
         ${
-          canEmail
-            ? `<button class="emailBtn secondary" type="button" data-action="parent-via-bridge">
+          parentCopyEnabled
+            ? `<button class="emailBtn" type="button" data-action="email-parent">
                  Email Parent
                </button>`
-            : `<button class="emailBtn secondary" disabled type="button">
+            : `<button class="emailBtn" disabled type="button">
                  Email Parent (templates missing)
                </button>`
         }
 
         ${
-          mailtoStudent
-            ? `<a class="emailBtn" href="${mailtoStudent}" onclick="event.stopPropagation();">
-                 Email Student Check-in
-               </a>`
-            : `<button class="emailBtn" disabled type="button">
+          studentCopyEnabled
+            ? `<button class="emailBtn secondary" type="button" data-action="email-student">
+                 Email Student
+               </button>`
+            : `<button class="emailBtn secondary" disabled type="button">
                  Email Student (templates missing)
                </button>`
         }
@@ -594,7 +596,7 @@ function render() {
         </a>
 
         <span class="tiny">
-          Parent email: click “Email Parent (via Bridge)” → copy email from Bridge → paste into Outlook → send
+          Email Parent: opens Bridge + copies subject/body to clipboard → click Bridge mailto → paste → send
         </span>
       </div>
 
@@ -604,12 +606,28 @@ function render() {
       </div>
     `;
 
-    // Wire up the single-button workflow
-    const parentBtn = card.querySelector('[data-action="parent-via-bridge"]');
-    if (parentBtn && mailtoParent) {
-      parentBtn.addEventListener("click", (ev) => {
+    // Wire parent action
+    const parentBtn = card.querySelector('[data-action="email-parent"]');
+    if (parentBtn && parentText) {
+      parentBtn.addEventListener("click", async (ev) => {
         ev.stopPropagation();
-        openParentEmailViaBridge({ bridgeUrl, mailtoParent });
+        await emailParentCopyAction({
+          bridgeUrl,
+          subject: parentText.subject,
+          body: parentText.body
+        });
+      });
+    }
+
+    // Wire student action
+    const studentBtn = card.querySelector('[data-action="email-student"]');
+    if (studentBtn && studentText) {
+      studentBtn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        await emailStudentCopyAction({
+          subject: studentText.subject,
+          body: studentText.body
+        });
       });
     }
 
@@ -709,5 +727,3 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
-
-
