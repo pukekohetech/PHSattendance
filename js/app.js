@@ -495,7 +495,7 @@ function exportFlaggedPDF_NoPopup() {
         <td><span class="print-badge ${tier}">${escapeHtml(overall)}</span></td>
         <td>${escapeHtml(String(s.unjustified ?? 0))}</td>
         <td>${lowSubsText}</td>
-        <td><span class="print-small">${escapeHtml(link)}</span></td>
+       <td><span class="print-small">Bridge: /students/student/${escapeHtml(s.studentId)}</span></td>
       </tr>
     `;
   }).join("");
@@ -911,3 +911,4 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
