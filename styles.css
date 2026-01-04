@@ -555,137 +555,137 @@ main{
 /* ===========================
    PRINT / PDF EXPORT STYLES
    =========================== */
+function exportFlaggedPDF_NoPopup() {
+  const { list, thresholds } = buildFlaggedListForExport();
 
-@media print {
-  /* Hide the normal app UI */
-  header,
-  .controls,
-  .toolbar,
-  details,
-  .empty,
-  .grid,
-  .actions,
-  .installBtn {
-    display: none !important;
+  if (!list.length) {
+    alert("No flagged students in the current view.");
+    return;
   }
 
-  body {
-    background: #fff !important;
-  }
+  const now = new Date();
+  const dateStr = now.toLocaleString();
+  const report = reportTitle || "Attendance Report";
+
+  const { overallThresh, subjThresh, unjustThresh } = thresholds;
+
+  // Build cards
+  const cardsHtml = list.map(s => {
+    const tier = overallTier(s.presentPct);
+    const tierText = tierLabel(tier);
+
+    const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
+
+    // Reasons (top 3)
+    const reasons = getReasons(s, overallThresh, subjThresh, unjustThresh)
+      .slice(0, 3)
+      .map(r => `<span class="print-pill ${r.type}">${escapeHtml(r.text)}</span>`)
+      .join("");
+
+    // Low subjects: show top 5 worst under threshold
+    const lowSubs = (s.subjects || [])
+      .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
+      .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
+      .slice(0, 5);
+
+    const subRows = lowSubs.length
+      ? lowSubs.map(sub => `
+          <div class="subj">${escapeHtml(sub.name)}</div>
+          <div class="pct">${escapeHtml(sub.attendance.toFixed(1))}%</div>
+        `).join("")
+      : `
+          <div class="subj" style="grid-column:1 / -1; color:#333;">
+            No low subjects listed under ${subjThresh}% in this report.
+          </div>
+        `;
+
+    const bridgePath = `/students/student/${s.studentId}`;
+
+    return `
+      <div class="print-card">
+        <div class="print-card-top">
+          <div class="print-student">
+            <p class="name">${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</p>
+            <div class="meta">
+              ID: <strong>${escapeHtml(s.studentId)}</strong> •
+              Year: <strong>${escapeHtml(s.yearLevel || "—")}</strong> •
+              Form: <strong>${escapeHtml(s.formClass || "—")}</strong><br>
+              Unjustified: <strong>${escapeHtml(String(s.unjustified ?? 0))}</strong>
+              • Justified: <strong>${escapeHtml(String(s.justified ?? 0))}</strong>
+            </div>
+          </div>
+
+          <div class="print-overall">
+            <div class="badge ${tier}">${escapeHtml(overall)}</div>
+            <div class="tier">${escapeHtml(tierText)}</div>
+          </div>
+        </div>
+
+        <div class="print-reasons">${reasons}</div>
+
+        <div class="print-subjects">
+          <h3>Lowest subjects (below ${subjThresh}%)</h3>
+          <div class="print-subject-list">
+            ${subRows}
+          </div>
+        </div>
+
+        <div class="print-footer">
+          <div>Bridge profile:</div>
+          <code>${escapeHtml(bridgePath)}</code>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // Save original page HTML (so we can restore after printing)
+  const originalHtml = document.body.innerHTML;
+  const originalTitle = document.title;
+
+  document.title = "Flagged Attendance Report";
+  document.body.innerHTML = `
+    <div class="print-page">
+      <div class="print-header">
+        <div class="print-title">
+          <h1>Flagged Attendance Report</h1>
+          <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
+        </div>
+        <div class="print-metrics">
+          <div><strong>${list.length}</strong> flagged students</div>
+          <div>Overall threshold: ${overallThresh}%</div>
+          <div>Subject threshold: ${subjThresh}%</div>
+          <div>Unjustified threshold: ${unjustThresh}</div>
+        </div>
+      </div>
+
+      <div class="print-cards">
+        ${cardsHtml}
+      </div>
+
+      <p class="print-small" style="margin-top:12px;color:#333;font-size:11px;">
+        Tip: Choose “Save as PDF” in the print dialog.
+      </p>
+    </div>
+  `;
+
+  const restore = () => {
+    document.body.innerHTML = originalHtml;
+    document.title = originalTitle;
+
+    cacheDom();
+    wireInputs();
+    wireFileUpload();
+    render();
+  };
+
+  window.addEventListener("afterprint", restore, { once: true });
+
+  setTimeout(() => {
+    window.print();
+
+    // Fallback restore (some browsers don’t fire afterprint reliably)
+    setTimeout(() => {
+      try { restore(); } catch {}
+    }, 900);
+  }, 250);
 }
-
-/* Main print container */
-.print-page {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color: #0b1220;
-  padding: 24px;
-  background: #fff;
-}
-
-/* Header section */
-.print-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 18px;
-  margin-bottom: 16px;
-  border-bottom: 2px solid rgba(11, 18, 32, 0.15);
-  padding-bottom: 12px;
-}
-
-.print-title h1 {
-  margin: 0;
-  font-size: 22px;
-  letter-spacing: 0.2px;
-}
-
-.print-title .sub {
-  margin-top: 4px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: rgba(11, 18, 32, 0.72);
-}
-
-.print-metrics {
-  text-align: right;
-  font-size: 12px;
-  line-height: 1.5;
-  color: rgba(11, 18, 32, 0.75);
-}
-
-/* Table layout */
-.print-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 14px;
-  font-size: 12px;
-}
-
-.print-table th,
-.print-table td {
-  border: 1px solid rgba(11, 18, 32, 0.18);
-  padding: 8px;
-  vertical-align: top;
-}
-
-.print-table th {
-  background: rgba(11, 18, 32, 0.06);
-  text-align: left;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-}
-
-/* Keep rows tidy */
-.print-table td {
-  line-height: 1.35;
-}
-
-/* Badge styles for attendance overall */
-.print-badge {
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 10px;
-  display: inline-block;
-  white-space: nowrap;
-}
-
-.print-badge.bad {
-  background: rgba(255, 60, 60, 0.15);
-  border: 1px solid rgba(255, 60, 60, 0.25);
-}
-
-.print-badge.warn {
-  background: rgba(255, 140, 0, 0.18);
-  border: 1px solid rgba(255, 140, 0, 0.28);
-}
-
-.print-badge.watch {
-  background: rgba(255, 210, 0, 0.20);
-  border: 1px solid rgba(255, 210, 0, 0.35);
-}
-
-.print-badge.good {
-  background: rgba(0, 180, 60, 0.15);
-  border: 1px solid rgba(0, 180, 60, 0.25);
-}
-
-/* Small muted text */
-.print-small {
-  font-size: 11px;
-  color: rgba(11, 18, 32, 0.75);
-}
-
-/* Print-friendly link styling (even though we show as text) */
-.print-link {
-  color: #1f87ff;
-  text-decoration: none;
-  word-break: break-all;
-}
-
-/* Better page margins */
-@page {
-  size: A4;
-  margin: 14mm;
-}
-
-
