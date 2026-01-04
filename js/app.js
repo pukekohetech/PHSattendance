@@ -465,42 +465,55 @@ function exportFlaggedPDF_NoPopup() {
     return;
   }
 
+  // Compact options
+  const MAX_LOW_SUBJECTS = 3;   // keeps cards short
+  const MAX_REASONS = 2;        // keeps pills short
+
   const now = new Date();
   const dateStr = now.toLocaleString();
   const report = reportTitle || "Attendance Report";
 
   const { overallThresh, subjThresh, unjustThresh } = thresholds;
 
-  // --- Build cards ---
+  // Summary counts
+  let criticalCount = 0;
+  let concernCount = 0;
+  let highUnjustCount = 0;
+
+  for (const s of list) {
+    const t = overallTier(s.presentPct);
+    if (t === "bad") criticalCount++;
+    if (t === "warn") concernCount++;
+    if ((s.unjustified || 0) >= unjustThresh) highUnjustCount++;
+  }
+
+  // Build cards
   const cardsHtml = list.map(s => {
     const tier = overallTier(s.presentPct);
     const tierText = tierLabel(tier);
     const overall = s.presentPct == null ? "N/A" : `${s.presentPct.toFixed(1)}%`;
 
-    // Reasons (top 3)
     const reasons = getReasons(s, overallThresh, subjThresh, unjustThresh)
-      .slice(0, 3)
+      .filter(r => r.type !== "good")
+      .slice(0, MAX_REASONS)
       .map(r => `<span class="print-pill ${r.type}">${escapeHtml(r.text)}</span>`)
-      .join("");
+      .join("") || `<span class="print-pill watch">Flagged</span>`;
 
-    // Worst subjects under threshold
     const lowSubs = (s.subjects || [])
       .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
       .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
-      .slice(0, 5);
+      .slice(0, MAX_LOW_SUBJECTS);
 
     const subRows = lowSubs.length
       ? lowSubs.map(sub => `
           <div class="subj">${escapeHtml(sub.name)}</div>
-          <div class="pct">${escapeHtml(sub.attendance.toFixed(1))}%</div>
+          <div class="pct">${escapeHtml(sub.attendance.toFixed(0))}%</div>
         `).join("")
       : `
         <div class="subj" style="grid-column:1 / -1; color:#333;">
-          No low subjects listed under ${subjThresh}% in this report.
+          No low subjects below ${subjThresh}% in this report.
         </div>
       `;
-
-    const bridgePath = `/students/student/${s.studentId}`;
 
     return `
       <div class="print-card">
@@ -509,10 +522,9 @@ function exportFlaggedPDF_NoPopup() {
             <p class="name">${escapeHtml(s.lastName)}, ${escapeHtml(s.firstName)}</p>
             <div class="meta">
               ID: <strong>${escapeHtml(s.studentId)}</strong> •
-              Year: <strong>${escapeHtml(s.yearLevel || "—")}</strong> •
-              Form: <strong>${escapeHtml(s.formClass || "—")}</strong><br>
+              Y<strong>${escapeHtml(s.yearLevel || "—")}</strong> •
+              <strong>${escapeHtml(s.formClass || "—")}</strong><br>
               Unjustified: <strong>${escapeHtml(String(s.unjustified ?? 0))}</strong>
-              • Justified: <strong>${escapeHtml(String(s.justified ?? 0))}</strong>
             </div>
           </div>
 
@@ -530,82 +542,35 @@ function exportFlaggedPDF_NoPopup() {
             ${subRows}
           </div>
         </div>
-
-        <div class="print-footer">
-          <div>Bridge profile:</div>
-          <code>${escapeHtml(bridgePath)}</code>
-        </div>
       </div>
     `;
   }).join("");
 
-  // Save original page content so we can restore after printing
+  // Save app DOM to restore later
   const originalHtml = document.body.innerHTML;
   const originalTitle = document.title;
 
-  // --- Inline CSS so it ALWAYS applies (no caching issues) ---
-  const inlineCSS = `
-    @media print {
-      header, .controls, .toolbar, details, .empty, .grid, .actions, .installBtn, #grid, #empty {
-        display: none !important;
-      }
-      html, body { background:#fff !important; color:#111 !important; }
-      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; box-shadow:none !important; text-shadow:none !important; }
-    }
-
-    .print-page { font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:#111; background:#fff; margin:0; padding:0; }
-    .print-header { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:12px; border-bottom:2px solid #111; padding-bottom:10px; }
-    .print-title h1 { margin:0; font-size:18px; letter-spacing:.2px; }
-    .print-title .sub { margin-top:4px; font-size:11px; line-height:1.4; color:#333; }
-    .print-metrics { text-align:right; font-size:11px; line-height:1.5; color:#333; }
-
-    .print-cards { display:grid; grid-template-columns:1fr; gap:10px; margin-top:12px; }
-    .print-card { border:2px solid #111; border-radius:12px; padding:10px 12px; page-break-inside:avoid; }
-    .print-card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
-    .print-student .name { margin:0; font-size:14px; font-weight:900; line-height:1.2; }
-    .print-student .meta { margin-top:3px; font-size:11px; color:#333; line-height:1.35; }
-
-    .print-overall { text-align:right; }
-    .print-overall .badge { display:inline-block; font-weight:900; font-size:13px; padding:4px 10px; border-radius:999px; border:3px solid #111; white-space:nowrap; }
-    .print-overall .tier { margin-top:4px; font-size:11px; color:#333; font-weight:700; }
-
-    .print-overall .badge.bad { border-color:#c00; color:#c00; }
-    .print-overall .badge.warn { border-color:#d60; color:#d60; }
-    .print-overall .badge.watch { border-color:#a80; color:#a80; }
-    .print-overall .badge.good { border-color:#080; color:#080; }
-
-    .print-reasons { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-    .print-pill { font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px; border:2px solid #111; white-space:nowrap; }
-    .print-pill.bad { border-color:#c00; color:#c00; }
-    .print-pill.warn { border-color:#d60; color:#d60; }
-    .print-pill.watch { border-color:#a80; color:#a80; }
-    .print-pill.good { border-color:#080; color:#080; }
-
-    .print-subjects { margin-top:10px; border-top:1px solid #111; padding-top:8px; }
-    .print-subjects h3 { margin:0 0 6px 0; font-size:11px; letter-spacing:.2px; text-transform:uppercase; }
-    .print-subject-list { display:grid; grid-template-columns:1fr 80px; gap:4px 10px; font-size:11px; }
-    .print-subject-list .pct { text-align:right; font-weight:900; }
-
-    .print-footer { margin-top:8px; padding-top:8px; border-top:1px dashed #111; font-size:10.5px; color:#333; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-    .print-footer code { font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:10.5px; color:#111; }
-
-    @page { size:A4; margin:12mm; }
-  `;
-
+  // Replace body with print-only markup (styles come from styles.css)
   document.title = "Flagged Attendance Report";
   document.body.innerHTML = `
-    <style>${inlineCSS}</style>
     <div class="print-page">
       <div class="print-header">
         <div class="print-title">
           <h1>Flagged Attendance Report</h1>
           <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
+
+          <div class="print-summary">
+            <span class="print-kpi bad">Critical: ${criticalCount}</span>
+            <span class="print-kpi warn">Concern: ${concernCount}</span>
+            <span class="print-kpi watch">High unjustified: ${highUnjustCount}</span>
+          </div>
         </div>
+
         <div class="print-metrics">
           <div><strong>${list.length}</strong> flagged students</div>
-          <div>Overall threshold: ${overallThresh}%</div>
-          <div>Subject threshold: ${subjThresh}%</div>
-          <div>Unjustified threshold: ${unjustThresh}</div>
+          <div>Overall: ${overallThresh}%</div>
+          <div>Subject: ${subjThresh}%</div>
+          <div>Unjustified: ${unjustThresh}+</div>
         </div>
       </div>
 
@@ -613,7 +578,7 @@ function exportFlaggedPDF_NoPopup() {
         ${cardsHtml}
       </div>
 
-      <p style="margin-top:12px;color:#333;font-size:11px;">
+      <p class="print-small" style="margin-top:10px;">
         Tip: Choose “Save as PDF” in the print dialog.
       </p>
     </div>
@@ -622,7 +587,6 @@ function exportFlaggedPDF_NoPopup() {
   const restore = () => {
     document.body.innerHTML = originalHtml;
     document.title = originalTitle;
-
     cacheDom();
     wireInputs();
     wireFileUpload();
@@ -631,10 +595,11 @@ function exportFlaggedPDF_NoPopup() {
 
   window.addEventListener("afterprint", restore, { once: true });
 
+  // Print
   setTimeout(() => {
     window.print();
 
-    // Fallback restore
+    // Fallback restore (some devices don’t fire afterprint)
     setTimeout(() => {
       try { restore(); } catch {}
     }, 900);
@@ -991,5 +956,6 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
