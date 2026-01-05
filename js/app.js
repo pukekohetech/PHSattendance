@@ -410,10 +410,12 @@ function getCurrentThresholds() {
 
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
 
+/* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
+
 function buildFlaggedListForExport() {
   if (!students.length) return { list: [], thresholds: null };
 
-  const qRaw = els.search?.value?.trim().toLowerCase() || "";
+  const qRaw = (els.search?.value || "").trim().toLowerCase();
   const qParts = qRaw.split(/\s+/).filter(Boolean);
 
   const y = els.year?.value || "";
@@ -423,7 +425,7 @@ function buildFlaggedListForExport() {
   const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
   const reasonGate = getReasonGate();
 
-  let filtered = students.filter(s => {
+  let filtered = students.filter((s) => {
     if (y && String(s.yearLevel) !== String(y)) return false;
 
     if (tierFilter) {
@@ -449,7 +451,9 @@ function buildFlaggedListForExport() {
     return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
   });
 
-  const flagged = filtered.filter(s => isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate));
+  const flagged = filtered.filter((s) =>
+    isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate)
+  );
 
   return {
     list: flagged,
@@ -458,14 +462,16 @@ function buildFlaggedListForExport() {
 }
 
 function exportFlaggedPDF_NoPopup() {
-  const { list, thresholds } = buildFlaggedListForExport();
+  const result = buildFlaggedListForExport();
+  const list = result.list || [];
+  const thresholds = result.thresholds || getCurrentThresholds();
 
-  if (!list || !list.length) {
+  if (!list.length) {
     alert("No flagged students in the current view.");
     return;
   }
 
-  // Compact choices
+  // compact limits
   const MAX_LOW_SUBJECTS = 3;
   const MAX_REASONS = 2;
 
@@ -473,9 +479,9 @@ function exportFlaggedPDF_NoPopup() {
   const dateStr = now.toLocaleString();
   const report = reportTitle || "Attendance Report";
 
-  const overallThresh = thresholds?.overallThresh ?? (Number(els.overallThreshold.value) || 80);
-  const subjThresh = thresholds?.subjThresh ?? (Number(els.subjectThreshold.value) || 80);
-  const unjustThresh = thresholds?.unjustThresh ?? (Number(els.unjustThreshold.value) || 10);
+  const overallThresh = thresholds.overallThresh;
+  const subjThresh = thresholds.subjThresh;
+  const unjustThresh = thresholds.unjustThresh;
 
   // Summary counts
   let criticalCount = 0;
@@ -489,34 +495,31 @@ function exportFlaggedPDF_NoPopup() {
     if ((s.unjustified || 0) >= unjustThresh) highUnjustCount++;
   }
 
-  // Build student cards HTML
+  // Build cards
   const cardsHtml = list.map((s) => {
     const tier = overallTier(s.presentPct);
     const tierText = tierLabel(tier);
-
     const overall = (s.presentPct == null) ? "N/A" : `${s.presentPct.toFixed(1)}%`;
 
     const reasonsArr = getReasons(s, overallThresh, subjThresh, unjustThresh)
-      .filter(r => r.type !== "good")
+      .filter((r) => r.type !== "good")
       .slice(0, MAX_REASONS);
 
     const reasonsHtml = reasonsArr.length
-      ? reasonsArr.map(r => `<span class="print-pill ${escapeHtml(r.type)}">${escapeHtml(r.text)}</span>`).join("")
+      ? reasonsArr.map((r) => `<span class="print-pill ${escapeHtml(r.type)}">${escapeHtml(r.text)}</span>`).join("")
       : `<span class="print-pill watch">Flagged</span>`;
 
     const lowSubs = (s.subjects || [])
-      .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
+      .filter((sub) => sub.attendance != null && sub.attendance < subjThresh)
       .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
       .slice(0, MAX_LOW_SUBJECTS);
 
     const subRowsHtml = lowSubs.length
-      ? lowSubs.map(sub => {
+      ? lowSubs.map((sub) => {
           const pct = (sub.attendance == null) ? "—" : `${sub.attendance.toFixed(0)}%`;
           return `<div class="subj">${escapeHtml(sub.name)}</div><div class="pct">${escapeHtml(pct)}</div>`;
         }).join("")
-      : `<div class="subj" style="grid-column:1 / -1; color:#333;">
-           No low subjects below ${escapeHtml(String(subjThresh))}% in this report.
-         </div>`;
+      : `<div class="subj" style="grid-column:1 / -1;">No low subjects under ${escapeHtml(String(subjThresh))}%</div>`;
 
     return `
       <div class="print-card">
@@ -549,9 +552,12 @@ function exportFlaggedPDF_NoPopup() {
     `;
   }).join("");
 
-  // Save original state so we can restore after printing
+  // Save original DOM + title
   const originalHtml = document.body.innerHTML;
   const originalTitle = document.title;
+
+  // Put the site into "printing mode" so CSS can target it
+  document.documentElement.classList.add("printing");
 
   // Replace body with print-only markup
   document.title = "Flagged Attendance Report";
@@ -577,45 +583,45 @@ function exportFlaggedPDF_NoPopup() {
         </div>
       </div>
 
-      <div class="print-cards">
-        ${cardsHtml}
-      </div>
+      <div class="print-cards">${cardsHtml}</div>
 
       <p class="print-small" style="margin-top:10px;">
-        Tip: Choose “Save as PDF” in the print dialog.
+        Tip: Choose "Save as PDF" in the print dialog.
       </p>
     </div>
   `;
 
-  // Restore app after printing
   const restore = () => {
-    document.body.innerHTML = originalHtml;
-    document.title = originalTitle;
+    try {
+      document.body.innerHTML = originalHtml;
+      document.title = originalTitle;
+      document.documentElement.classList.remove("printing");
 
-    // Re-cache DOM and re-wire (important after innerHTML swap)
-    cacheDom();
-    wireInputs();
-    wireFileUpload();
-    render();
+      cacheDom();
+      wireInputs();
+      wireFileUpload();
+      render();
+    } catch (e) {
+      console.warn("Restore failed", e);
+      location.reload();
+    }
   };
 
   window.addEventListener("afterprint", restore, { once: true });
 
-  // Print (delay ensures DOM is ready)
+  // Print after DOM update
   setTimeout(() => {
     try {
       window.print();
     } catch (err) {
       console.error(err);
-      alert("Printing failed. Check pop-up / print permissions.");
+      alert("Printing failed. Check print permissions.");
       restore();
       return;
     }
 
-    // Fallback restore if afterprint fails
-    setTimeout(() => {
-      try { restore(); } catch {}
-    }, 1000);
+    // fallback restore if afterprint doesn't fire
+    setTimeout(() => restore(), 1200);
   }, 300);
 }
 
@@ -970,6 +976,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
