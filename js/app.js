@@ -556,6 +556,7 @@ function exportFlaggedPDF_NoPopup() {
   const originalTitle = document.title;
 
   document.title = "Flagged Attendance Report";
+  document.documentElement.classList.add("printing");
   document.body.innerHTML = `
     <div class="print-page">
       <div class="print-header">
@@ -591,6 +592,7 @@ function exportFlaggedPDF_NoPopup() {
   const restore = () => {
     document.body.innerHTML = originalHtml;
     document.title = originalTitle;
+    document.documentElement.classList.remove("printing");
 
     cacheDom();
     wireInputs();
@@ -976,6 +978,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
