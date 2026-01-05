@@ -181,14 +181,16 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        const reg = await navigator.serviceWorker.register("./service-worker.js", { scope: "./" });
+        const swUrl = new URL("./service-worker.js", window.location.href);
+        const reg = await navigator.serviceWorker.register(swUrl, { scope: "./" });
         console.log("✅ SW registered:", reg.scope);
       } catch (err) {
-        console.warn("❌ SW register failed:", err);
+        console.error("❌ SW register failed:", err);
       }
     });
   }
 </script>
+
 
   
 <!-- Your app -->
@@ -223,6 +225,7 @@
 
 </body>
 </html>
+
 
 
 
