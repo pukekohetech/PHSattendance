@@ -411,6 +411,7 @@ function getCurrentThresholds() {
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
 
 function exportFlaggedPDF_NoPopup() {
+  console.log("✅ Export clicked", students.length);
   const result = buildFlaggedListForExport();
   const list = result.list || [];
   const thresholds = result.thresholds || getCurrentThresholds();
@@ -1070,6 +1071,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
