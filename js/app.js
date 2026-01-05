@@ -955,13 +955,22 @@ function wireInputs() {
   });
 
   // Export flagged to PDF (no popups)
-  els.export?.addEventListener("click", () => {
+if (els.export && !els.export.dataset.wired) {
+  els.export.dataset.wired = "1";
+
+  els.export.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!students.length) {
       alert("Upload a report first.");
       return;
     }
+
     exportFlaggedPDF_NoPopup();
   });
+}
+
 
   // Reset (optional)
   els.reset?.addEventListener("click", () => {
@@ -1061,6 +1070,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
