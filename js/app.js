@@ -410,66 +410,15 @@ function getCurrentThresholds() {
 
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
-
-function buildFlaggedListForExport() {
-  if (!students.length) return { list: [], thresholds: null };
-
-  const qRaw = (els.search?.value || "").trim().toLowerCase();
-  const qParts = qRaw.split(/\s+/).filter(Boolean);
-
-  const y = els.year?.value || "";
-  const tierFilter = els.tier?.value || "";
-  const sort = els.sort?.value || "risk";
-
-  const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
-  const reasonGate = getReasonGate();
-
-  let filtered = students.filter((s) => {
-    if (y && String(s.yearLevel) !== String(y)) return false;
-
-    if (tierFilter) {
-      const t = overallTier(s.presentPct);
-      if (t !== tierFilter) return false;
-    }
-
-    if (qParts.length) {
-      const hay = buildSearchHaystack(s);
-      for (const p of qParts) {
-        if (!hay.includes(p)) return false;
-      }
-    }
-
-    return true;
-  });
-
-  filtered.sort((a, b) => {
-    if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
-    if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
-    if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
-    if (sort === "unjust") return (b.unjustified ?? 0) - (a.unjustified ?? 0);
-    return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
-  });
-
-  const flagged = filtered.filter((s) =>
-    isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate)
-  );
-
-  return {
-    list: flagged,
-    thresholds: { overallThresh, subjThresh, unjustThresh }
-  };
-}
-
 function exportFlaggedPDF_NoPopup() {
-  const result = buildFlaggedListForExport();
-  const list = result.list || [];
-  const thresholds = result.thresholds || getCurrentThresholds();
+  const { list, thresholds } = buildFlaggedListForExport();
 
-  if (!list.length) {
+  if (!list || !list.length) {
     alert("No flagged students in the current view.");
     return;
   }
 
+  // Compact choices
   const MAX_LOW_SUBJECTS = 3;
   const MAX_REASONS = 2;
 
@@ -477,9 +426,9 @@ function exportFlaggedPDF_NoPopup() {
   const dateStr = now.toLocaleString();
   const report = reportTitle || "Attendance Report";
 
-  const overallThresh = thresholds.overallThresh;
-  const subjThresh = thresholds.subjThresh;
-  const unjustThresh = thresholds.unjustThresh;
+  const overallThresh = thresholds?.overallThresh ?? (Number(els.overallThreshold?.value) || 80);
+  const subjThresh = thresholds?.subjThresh ?? (Number(els.subjectThreshold?.value) || 80);
+  const unjustThresh = thresholds?.unjustThresh ?? (Number(els.unjustThreshold?.value) || 10);
 
   // Summary counts
   let criticalCount = 0;
@@ -493,32 +442,33 @@ function exportFlaggedPDF_NoPopup() {
     if ((s.unjustified || 0) >= unjustThresh) highUnjustCount++;
   }
 
+  // Build student cards HTML
   const cardsHtml = list.map((s) => {
     const tier = overallTier(s.presentPct);
     const tierText = tierLabel(tier);
     const overall = (s.presentPct == null) ? "N/A" : `${s.presentPct.toFixed(1)}%`;
 
     const reasonsArr = getReasons(s, overallThresh, subjThresh, unjustThresh)
-      .filter((r) => r.type !== "good")
+      .filter(r => r.type !== "good")
       .slice(0, MAX_REASONS);
 
     const reasonsHtml = reasonsArr.length
-      ? reasonsArr.map((r) =>
-          `<span class="print-pill ${escapeHtml(r.type)}">${escapeHtml(r.text)}</span>`
-        ).join("")
+      ? reasonsArr.map(r => `<span class="print-pill ${escapeHtml(r.type)}">${escapeHtml(r.text)}</span>`).join("")
       : `<span class="print-pill watch">Flagged</span>`;
 
     const lowSubs = (s.subjects || [])
-      .filter((sub) => sub.attendance != null && sub.attendance < subjThresh)
+      .filter(sub => sub.attendance != null && sub.attendance < subjThresh)
       .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
       .slice(0, MAX_LOW_SUBJECTS);
 
     const subRowsHtml = lowSubs.length
-      ? lowSubs.map((sub) => {
+      ? lowSubs.map(sub => {
           const pct = (sub.attendance == null) ? "—" : `${sub.attendance.toFixed(0)}%`;
           return `<div class="subj">${escapeHtml(sub.name)}</div><div class="pct">${escapeHtml(pct)}</div>`;
         }).join("")
-      : `<div class="subj" style="grid-column:1 / -1;">No low subjects under ${escapeHtml(String(subjThresh))}%</div>`;
+      : `<div class="subj" style="grid-column:1 / -1; color:#333;">
+           No low subjects below ${escapeHtml(String(subjThresh))}% in this report.
+         </div>`;
 
     return `
       <div class="print-card">
@@ -551,262 +501,66 @@ function exportFlaggedPDF_NoPopup() {
     `;
   }).join("");
 
-  // save original
-  const originalHtml = document.body.innerHTML;
-  const originalTitle = document.title;
+  // ✅ Build print container WITHOUT destroying the app
+  const printWrap = document.createElement("div");
+  printWrap.className = "print-page";
+  printWrap.id = "printWrap";
 
-  // ✅ Inject print CSS into HEAD (bulletproof)
-  const styleTag = document.createElement("style");
-  styleTag.id = "injected-print-css";
-  styleTag.textContent = `
-    @page{ size:A4; margin:10mm; }
+  printWrap.innerHTML = `
+    <div class="print-header">
+      <div class="print-title">
+        <h1>Flagged Attendance Report</h1>
+        <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
 
-    @media print{
-      *{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-
-    body{ margin:0; background:#fff !important; }
-
-    .print-page{
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color:#111;
-      background:#fff;
-      margin:0;
-      padding:6mm;
-    }
-
-    .print-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:14px;
-      margin-bottom:10px;
-      border-bottom:2px solid #111;
-      padding-bottom:8px;
-    }
-
-    .print-title h1{
-      margin:0;
-      font-size:16px;
-      letter-spacing:.2px;
-    }
-
-    .print-title .sub{
-      margin-top:3px;
-      font-size:10.5px;
-      line-height:1.35;
-      color:#333;
-    }
-
-    .print-metrics{
-      text-align:right;
-      font-size:10.5px;
-      line-height:1.4;
-      color:#333;
-      font-weight:700;
-    }
-
-    .print-summary{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-      margin-top:8px;
-    }
-
-    .print-kpi{
-      border:1.8px solid #111;
-      border-radius:999px;
-      padding:3px 10px;
-      font-size:10.5px;
-      font-weight:900;
-      white-space:nowrap;
-    }
-    .print-kpi.bad{ border-color:#c00; color:#c00; }
-    .print-kpi.warn{ border-color:#d60; color:#d60; }
-    .print-kpi.watch{ border-color:#a80; color:#a80; }
-
-    .print-cards{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:8px;
-      margin-top:10px;
-    }
-
-    .print-card{
-      border:1.8px solid #111;
-      border-radius:10px;
-      padding:8px 10px;
-      break-inside:avoid;
-      page-break-inside:avoid;
-    }
-
-    .print-card-top{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      gap:10px;
-    }
-
-    .print-student .name{
-      margin:0;
-      font-size:12.5px;
-      font-weight:900;
-      line-height:1.15;
-    }
-
-    .print-student .meta{
-      margin-top:2px;
-      font-size:10px;
-      color:#333;
-      line-height:1.25;
-    }
-
-    .print-overall{ text-align:right; }
-    .print-overall .badge{
-      display:inline-block;
-      font-weight:900;
-      font-size:12px;
-      padding:3px 9px;
-      border-radius:999px;
-      border:2.6px solid #111;
-      white-space:nowrap;
-    }
-
-    .print-overall .tier{
-      margin-top:3px;
-      font-size:10px;
-      color:#333;
-      font-weight:800;
-    }
-
-    .print-overall .badge.bad{ border-color:#c00; color:#c00; }
-    .print-overall .badge.warn{ border-color:#d60; color:#d60; }
-    .print-overall .badge.watch{ border-color:#a80; color:#a80; }
-    .print-overall .badge.good{ border-color:#080; color:#080; }
-
-    .print-reasons{
-      display:flex;
-      flex-wrap:wrap;
-      gap:5px;
-      margin-top:6px;
-    }
-
-    .print-pill{
-      font-size:9.5px;
-      font-weight:800;
-      padding:1px 7px;
-      border-radius:999px;
-      border:1.8px solid #111;
-      white-space:nowrap;
-    }
-
-    .print-pill.bad{ border-color:#c00; color:#c00; }
-    .print-pill.warn{ border-color:#d60; color:#d60; }
-    .print-pill.watch{ border-color:#a80; color:#a80; }
-    .print-pill.good{ border-color:#080; color:#080; }
-
-    .print-subjects{
-      margin-top:7px;
-      border-top:1px solid #111;
-      padding-top:6px;
-    }
-
-    .print-subjects h3{
-      margin:0 0 5px 0;
-      font-size:10px;
-      letter-spacing:.2px;
-      text-transform:uppercase;
-    }
-
-    .print-subject-list{
-      display:grid;
-      grid-template-columns:1fr 60px;
-      gap:3px 8px;
-      font-size:10px;
-      line-height:1.2;
-    }
-
-    .print-subject-list .pct{
-      text-align:right;
-      font-weight:900;
-    }
-
-    .print-small{
-      font-size:10.5px;
-      color:#333;
-    }
-
-    @media print and (max-width:600px){
-      .print-cards{ grid-template-columns:1fr; }
-    }
-  `;
-  document.head.appendChild(styleTag);
-
-  // Replace body with print content
-  document.title = "Flagged Attendance Report";
-  document.body.innerHTML = `
-    <div class="print-page">
-      <div class="print-header">
-        <div class="print-title">
-          <h1>Flagged Attendance Report</h1>
-          <div class="sub">${escapeHtml(report)}<br>${escapeHtml(dateStr)}</div>
-
-          <div class="print-summary">
-            <span class="print-kpi bad">Critical: ${escapeHtml(String(criticalCount))}</span>
-            <span class="print-kpi warn">Concern: ${escapeHtml(String(concernCount))}</span>
-            <span class="print-kpi watch">High unjustified: ${escapeHtml(String(highUnjustCount))}</span>
-          </div>
-        </div>
-
-        <div class="print-metrics">
-          <div><strong>${escapeHtml(String(list.length))}</strong> flagged students</div>
-          <div>Overall: ${escapeHtml(String(overallThresh))}%</div>
-          <div>Subject: ${escapeHtml(String(subjThresh))}%</div>
-          <div>Unjustified: ${escapeHtml(String(unjustThresh))}+</div>
+        <div class="print-summary">
+          <span class="print-kpi bad">Critical: ${escapeHtml(String(criticalCount))}</span>
+          <span class="print-kpi warn">Concern: ${escapeHtml(String(concernCount))}</span>
+          <span class="print-kpi watch">High unjustified: ${escapeHtml(String(highUnjustCount))}</span>
         </div>
       </div>
 
-      <div class="print-cards">${cardsHtml}</div>
-
-      <p class="print-small" style="margin-top:10px;">
-        Tip: Choose "Save as PDF" in the print dialog.
-      </p>
+      <div class="print-metrics">
+        <div><strong>${escapeHtml(String(list.length))}</strong> flagged students</div>
+        <div>Overall: ${escapeHtml(String(overallThresh))}%</div>
+        <div>Subject: ${escapeHtml(String(subjThresh))}%</div>
+        <div>Unjustified: ${escapeHtml(String(unjustThresh))}+</div>
+      </div>
     </div>
+
+    <div class="print-cards">${cardsHtml}</div>
+
+    <p class="print-small" style="margin-top:10px;">
+      Tip: Choose “Save as PDF” in the print dialog.
+    </p>
   `;
 
-  const restore = () => {
-    try {
-      document.body.innerHTML = originalHtml;
-      document.title = originalTitle;
+  // Add to page
+  document.body.appendChild(printWrap);
 
-      // remove injected css
-      document.getElementById("injected-print-css")?.remove();
+  // Switch into print mode
+  document.documentElement.classList.add("printing");
 
-      cacheDom();
-      wireInputs();
-      wireFileUpload();
-      render();
-    } catch (e) {
-      console.warn("Restore failed", e);
-      location.reload();
-    }
+  const cleanup = () => {
+    document.documentElement.classList.remove("printing");
+    printWrap.remove();
+    window.removeEventListener("afterprint", cleanup);
   };
 
-  window.addEventListener("afterprint", restore, { once: true });
+  window.addEventListener("afterprint", cleanup);
 
+  // Print (delay lets layout settle)
   setTimeout(() => {
     try {
       window.print();
     } catch (err) {
       console.error(err);
       alert("Printing failed.");
-      restore();
-      return;
+      cleanup();
     }
 
-    // backup restore
-    setTimeout(restore, 1200);
-  }, 50);
+    // fallback if afterprint doesn't fire
+    setTimeout(() => cleanup(), 1200);
+  }, 200);
 }
 
 
@@ -1168,6 +922,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
