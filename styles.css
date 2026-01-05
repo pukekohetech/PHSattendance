@@ -569,23 +569,33 @@ main{
    =========================== */
 
 /* printing mode (before window.print()) */
-html.printing body{
-  background:#fff !important;
-}
+
+/* PRINT MODE: show print-page + hide app */
+.print-page { display: none; }
+
+html.printing .print-page { display: block !important; }
 
 html.printing header,
 html.printing .controls,
 html.printing .statsbar,
 html.printing main,
-html.printing .grid,
-html.printing .empty,
-html.printing details{
-  display:none !important;
+html.printing #grid,
+html.printing #empty,
+html.printing details,
+html.printing .installBtn {
+  display: none !important;
 }
 
-html.printing .print-page{
-  display:block !important;
+html.printing *{
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
 }
+
+
+html.printing body{
+  background:#fff !important;
+}
+
 
 html.printing *{
   -webkit-print-color-adjust: exact !important;
@@ -784,3 +794,4 @@ html.printing *{
 @media print and (max-width:600px){
   .print-cards{ grid-template-columns:1fr; }
 }
+
