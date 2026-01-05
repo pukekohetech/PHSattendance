@@ -410,6 +410,60 @@ function getCurrentThresholds() {
 
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
+function buildFlaggedListForExport() {
+  if (!students.length) return { list: [], thresholds: null };
+
+  const qRaw = (els.search?.value || "").trim().toLowerCase();
+  const qParts = qRaw.split(/\s+/).filter(Boolean);
+
+  const y = els.year?.value || "";
+  const tierFilter = els.tier?.value || "";
+  const sort = els.sort?.value || "risk";
+
+  const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
+  const reasonGate = getReasonGate();
+
+  // 1) Filter by year/tier/search only (NOT flaggedOnly)
+  let filtered = students.filter((s) => {
+    if (y && String(s.yearLevel) !== String(y)) return false;
+
+    if (tierFilter) {
+      const t = overallTier(s.presentPct);
+      if (t !== tierFilter) return false;
+    }
+
+    if (qParts.length) {
+      const hay = buildSearchHaystack(s);
+      for (const p of qParts) {
+        if (!hay.includes(p)) return false;
+      }
+    }
+
+    return true;
+  });
+
+  // 2) Sort
+  filtered.sort((a, b) => {
+    if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
+    if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
+    if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
+    if (sort === "unjust") return (b.unjustified ?? 0) - (a.unjustified ?? 0);
+    return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
+  });
+
+  // 3) Export ONLY flagged
+  const flagged = filtered.filter((s) =>
+    isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate)
+  );
+
+  return {
+    list: flagged,
+    thresholds: { overallThresh, subjThresh, unjustThresh }
+  };
+}
+
+
+
 function exportFlaggedPDF_NoPopup() {
   const { list, thresholds } = buildFlaggedListForExport();
 
@@ -922,6 +976,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
