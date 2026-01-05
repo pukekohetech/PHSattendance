@@ -694,10 +694,6 @@ function exportFlaggedPDF_NoPopup() {
     }
   </style>
 
-  <div class="print-page">
-    ...
-  </div>
-`;
 
     <div class="print-page">
       <div class="print-header">
@@ -1113,6 +1109,7 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
 
