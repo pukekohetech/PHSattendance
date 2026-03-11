@@ -795,3 +795,167 @@ html.printing *{
   .print-cards{ grid-template-columns:1fr; }
 }
 
+/* ===========================
+   PRINT TOOLS BAR + TUTOR STACK PRINT
+   =========================== */
+
+.printTools{
+  max-width:1200px;
+  margin:0 auto 14px;
+  padding:0 18px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:center;
+}
+
+.yearPrintWrap{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+
+.printLabel{
+  font-weight:1100;
+  font-size:13px;
+}
+
+.yearPrintButtons{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.printStackRoot{
+  display:none;
+}
+
+.tutorPrintPack{
+  display:block;
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 18px 20px;
+}
+
+.tutorPrintSection{
+  break-after:page;
+  page-break-after:always;
+}
+
+.tutorPrintSection:last-child{
+  break-after:auto;
+  page-break-after:auto;
+}
+
+.tutorPrintHeader{
+  margin:0 0 14px;
+  padding:0 0 10px;
+  border-bottom:2px solid #000;
+}
+
+.tutorPrintHeader h2{
+  margin:0 0 4px;
+  font-size:20px;
+  line-height:1.2;
+}
+
+.tutorPrintMeta{
+  font-size:12px;
+  color:#222;
+  line-height:1.4;
+}
+
+.tutorPrintStudent{
+  border:1px solid #000;
+  border-radius:8px;
+  padding:10px 12px;
+  margin:0 0 10px;
+  break-inside:avoid;
+  page-break-inside:avoid;
+}
+
+.tutorPrintTop{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:6px;
+  font-weight:1100;
+  font-size:14px;
+}
+
+.tutorPrintSub{
+  font-size:13px;
+  line-height:1.45;
+}
+
+.tutorPrintReasons{
+  margin-top:6px;
+  font-size:12px;
+}
+
+.tutorPrintReason{
+  display:inline-block;
+  border:1px solid #000;
+  border-radius:999px;
+  padding:2px 8px;
+  margin:0 6px 6px 0;
+}
+
+/* ===========================
+   PRINT CURRENT VIEW / STACK
+   =========================== */
+
+@media print{
+  body.printing-visible .print-page,
+  body.printing-stack .print-page,
+  body.printing-visible #printWrap,
+  body.printing-stack #printWrap{
+    display:none !important;
+  }
+
+  body.printing-visible header,
+  body.printing-visible .controls,
+  body.printing-visible .statsbar,
+  body.printing-visible .printTools,
+  body.printing-visible #statusBar,
+  body.printing-visible #empty{
+    display:none !important;
+  }
+
+  body.printing-visible main{
+    display:block !important;
+    max-width:none !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  body.printing-visible #grid{
+    display:grid !important;
+    grid-template-columns:repeat(3, 1fr) !important;
+    gap:10px !important;
+  }
+
+  body.printing-visible #grid .actions{
+    display:none !important;
+  }
+
+  body.printing-visible #grid > *{
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+
+  body.printing-stack header,
+  body.printing-stack .controls,
+  body.printing-stack .statsbar,
+  body.printing-stack .printTools,
+  body.printing-stack main,
+  body.printing-stack #statusBar,
+  body.printing-stack #empty{
+    display:none !important;
+  }
+
+  body.printing-stack .printStackRoot{
+    display:block !important;
+  }
+}
