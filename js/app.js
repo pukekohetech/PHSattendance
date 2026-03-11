@@ -1053,6 +1053,15 @@ function wireInputs() {
     });
   }
 
+  if (els.printFilteredStyledBtn && !els.printFilteredStyledBtn.dataset.wired) {
+    els.printFilteredStyledBtn.dataset.wired = "1";
+    els.printFilteredStyledBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      printFilteredStyledCards();
+    });
+  }
+
   els.closeAdvancedBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1171,5 +1180,6 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
 
