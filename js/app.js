@@ -54,10 +54,15 @@ const els = {
   statRedOrange: document.getElementById("statRedOrange"),
   statHighUnjust: document.getElementById("statHighUnjust"),
   statTitle: document.getElementById("statTitle"),
+
+  printVisibleBtn: document.getElementById("printVisibleBtn"),
+  yearPrintButtons: document.getElementById("yearPrintButtons"),
+  printStackRoot: document.getElementById("printStackRoot"),
 };
 
 // Status banner (helps diagnose GitHub Pages issues)
 const statusBar = document.createElement("div");
+statusBar.id = "statusBar";
 statusBar.style.maxWidth = "1200px";
 statusBar.style.margin = "0 auto";
 statusBar.style.padding = "0 18px 12px";
@@ -250,6 +255,24 @@ function populateYearFilter(list) {
   els.year.innerHTML =
     `<option value="">All</option>` +
     years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join("");
+
+  if (els.yearPrintButtons) {
+    els.yearPrintButtons.innerHTML = years.map(y => `
+      <button
+        type="button"
+        class="miniBtn"
+        data-print-year="${escapeHtml(y)}"
+      >
+        Print Y${escapeHtml(y)} tutor stack
+      </button>
+    `).join("");
+
+    els.yearPrintButtons.querySelectorAll("[data-print-year]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        printTutorStackForYear(btn.dataset.printYear);
+      });
+    });
+  }
 }
 
 /* ------------------------- Flagging ------------------------- */
@@ -409,7 +432,7 @@ function getCurrentThresholds() {
 }
 
 /* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
-/* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
+
 function buildFlaggedListForExport() {
   if (!students.length) return { list: [], thresholds: null };
 
@@ -461,8 +484,6 @@ function buildFlaggedListForExport() {
     thresholds: { overallThresh, subjThresh, unjustThresh }
   };
 }
-
-
 
 function exportFlaggedPDF_NoPopup() {
   const { list, thresholds } = buildFlaggedListForExport();
@@ -555,7 +576,7 @@ function exportFlaggedPDF_NoPopup() {
     `;
   }).join("");
 
-  // ✅ Build print container WITHOUT destroying the app
+  // Build print container WITHOUT destroying the app
   const printWrap = document.createElement("div");
   printWrap.className = "print-page";
   printWrap.id = "printWrap";
@@ -617,6 +638,140 @@ function exportFlaggedPDF_NoPopup() {
   }, 200);
 }
 
+/* ------------------------- Print helpers ------------------------- */
+
+function cleanupPrintModes() {
+  document.body.classList.remove("printing-visible", "printing-stack");
+  if (els.printStackRoot) els.printStackRoot.innerHTML = "";
+}
+
+function printCurrentView() {
+  if (!students.length || !els.grid || !els.grid.children.length) {
+    alert("Nothing to print in the current view.");
+    return;
+  }
+
+  document.body.classList.remove("printing-stack");
+  document.body.classList.add("printing-visible");
+  window.print();
+}
+
+function sortStudentsByName(a, b) {
+  const an = `${a.lastName || ""}, ${a.firstName || ""}`.trim();
+  const bn = `${b.lastName || ""}, ${b.firstName || ""}`.trim();
+  return an.localeCompare(bn);
+}
+
+function lowSubjectsForPrint(student, subjThresh, limit = 3) {
+  const low = (student.subjects || [])
+    .filter(sub => sub.attendance !== null && sub.attendance < subjThresh)
+    .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
+    .slice(0, limit);
+
+  if (!low.length) return "—";
+
+  return low
+    .map(sub => `${sub.name} ${sub.attendance.toFixed(1)}%`)
+    .join(" • ");
+}
+
+function buildTutorStudentPrintCard(student, overallThresh, subjThresh, unjustThresh) {
+  const overall = (student.presentPct === null) ? "N/A" : `${student.presentPct.toFixed(1)}%`;
+  const reasons = getReasons(student, overallThresh, subjThresh, unjustThresh)
+    .filter(r => r.type !== "good");
+
+  const reasonsHtml = reasons.length
+    ? reasons.map(r => `<span class="tutorPrintReason">${escapeHtml(r.text)}</span>`).join("")
+    : `<span class="tutorPrintReason">No flags</span>`;
+
+  return `
+    <article class="tutorPrintStudent">
+      <div class="tutorPrintTop">
+        <div>${escapeHtml(student.lastName)}, ${escapeHtml(student.firstName)}</div>
+        <div>${escapeHtml(student.studentId)}</div>
+      </div>
+
+      <div class="tutorPrintSub">
+        <div><strong>Year:</strong> ${escapeHtml(student.yearLevel || "—")} &nbsp; <strong>Tutor:</strong> ${escapeHtml(student.formClass || "—")}</div>
+        <div><strong>Overall:</strong> ${escapeHtml(overall)} &nbsp; <strong>Unjustified:</strong> ${escapeHtml(String(student.unjustified ?? 0))}</div>
+        <div><strong>Lowest subjects:</strong> ${escapeHtml(lowSubjectsForPrint(student, subjThresh, 3))}</div>
+      </div>
+
+      <div class="tutorPrintReasons">${reasonsHtml}</div>
+    </article>
+  `;
+}
+
+function printTutorStackForYear(year) {
+  if (!els.printStackRoot) {
+    alert("Print stack container not found in the HTML.");
+    return;
+  }
+
+  const yearStudents = students
+    .filter(s => String(s.yearLevel) === String(year))
+    .slice()
+    .sort((a, b) => {
+      const tutorCompare = String(a.formClass || "").localeCompare(String(b.formClass || ""));
+      if (tutorCompare !== 0) return tutorCompare;
+      return sortStudentsByName(a, b);
+    });
+
+  if (!yearStudents.length) {
+    alert(`No students found for Year ${year}.`);
+    return;
+  }
+
+  const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
+
+  const tutorMap = new Map();
+  for (const s of yearStudents) {
+    const tutor = String(s.formClass || "NO TUTOR").trim() || "NO TUTOR";
+    if (!tutorMap.has(tutor)) tutorMap.set(tutor, []);
+    tutorMap.get(tutor).push(s);
+  }
+
+  const dateStr = new Date().toLocaleString();
+  const report = reportTitle || "Attendance Report";
+
+  const sectionsHtml = [...tutorMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([tutorCode, tutorStudents]) => {
+      const flaggedCount = tutorStudents.filter(s =>
+        isFlagged(s, overallThresh, subjThresh, unjustThresh, {
+          lowOverall: true,
+          highUnjust: true,
+          lowSubject: true,
+          missingSubject: true
+        })
+      ).length;
+
+      return `
+        <section class="tutorPrintSection">
+          <div class="tutorPrintHeader">
+            <h2>Year ${escapeHtml(String(year))} — Tutor ${escapeHtml(tutorCode)}</h2>
+            <div class="tutorPrintMeta">
+              ${escapeHtml(report)}<br>
+              ${escapeHtml(dateStr)}<br>
+              ${tutorStudents.length} student(s) • ${flaggedCount} flagged
+            </div>
+          </div>
+
+          ${tutorStudents
+            .slice()
+            .sort(sortStudentsByName)
+            .map(s => buildTutorStudentPrintCard(s, overallThresh, subjThresh, unjustThresh))
+            .join("")}
+        </section>
+      `;
+    }).join("");
+
+  els.printStackRoot.innerHTML = `<div class="tutorPrintPack">${sectionsHtml}</div>`;
+
+  document.body.classList.remove("printing-visible");
+  document.body.classList.add("printing-stack");
+  window.print();
+}
 
 /* ------------------------- Render ------------------------- */
 
@@ -847,12 +1002,30 @@ function cacheDom() {
   els.statRedOrange = document.getElementById("statRedOrange");
   els.statHighUnjust = document.getElementById("statHighUnjust");
   els.statTitle = document.getElementById("statTitle");
+
+  els.printVisibleBtn = document.getElementById("printVisibleBtn");
+  els.yearPrintButtons = document.getElementById("yearPrintButtons");
+  els.printStackRoot = document.getElementById("printStackRoot");
 }
 
 /* ---------------------- Wiring ---------------------- */
 
 function wireInputs() {
   cacheDom();
+
+  if (!window.__attendancePrintCleanupWired) {
+    window.__attendancePrintCleanupWired = true;
+    window.addEventListener("afterprint", cleanupPrintModes);
+  }
+
+  if (els.printVisibleBtn && !els.printVisibleBtn.dataset.wired) {
+    els.printVisibleBtn.dataset.wired = "1";
+    els.printVisibleBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      printCurrentView();
+    });
+  }
 
   els.closeAdvancedBtn?.addEventListener("click", (e) => {
     e.preventDefault();
@@ -861,22 +1034,21 @@ function wireInputs() {
   });
 
   // Export flagged to PDF (no popups)
-if (els.export && !els.export.dataset.wired) {
-  els.export.dataset.wired = "1";
+  if (els.export && !els.export.dataset.wired) {
+    els.export.dataset.wired = "1";
 
-  els.export.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    els.export.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-    if (!students.length) {
-      alert("Upload a report first.");
-      return;
-    }
+      if (!students.length) {
+        alert("Upload a report first.");
+        return;
+      }
 
-    exportFlaggedPDF_NoPopup();
-  });
-}
-
+      exportFlaggedPDF_NoPopup();
+    });
+  }
 
   // Reset (optional)
   els.reset?.addEventListener("click", () => {
@@ -889,6 +1061,8 @@ if (els.export && !els.export.dataset.wired) {
       if (els.tier) els.tier.value = "";
       if (els.sort) els.sort.value = "risk";
       if (els.flagOnly) els.flagOnly.checked = false;
+      if (els.yearPrintButtons) els.yearPrintButtons.innerHTML = "";
+      cleanupPrintModes();
       render();
     }
   });
@@ -976,18 +1150,3 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
