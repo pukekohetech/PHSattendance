@@ -12,10 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="yes">
 
-  <!-- PapaParse for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
-  <!-- Your styles -->
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -31,38 +28,34 @@
       <br/>
       Upload the detailed attendance CSV → quickly identify attendance concerns.
       <br/>
-      Use <b>Open Bridge Profile</b> to copy parent email (Option A).
+      Use <b>Open Bridge Profile</b> to copy parent email.
     </div>
   </header>
 
   <section class="controls">
-    <!-- File upload -->
     <div class="control">
-      <label>Upload report CSV</label>
+      <label for="file">Upload report CSV</label>
       <input id="file" type="file" accept=".csv"/>
       <div class="hint">
         If your report exports as “one long line”, it will be repaired automatically.
       </div>
     </div>
 
-    <!-- Search -->
     <div class="control">
-      <label>Search</label>
+      <label for="search">Search</label>
       <input id="search" type="text" placeholder="Name / ID / form class..."/>
       <div class="hint">Example: “Smith”, “12RY”, “23562”</div>
     </div>
 
-    <!-- Year -->
     <div class="control">
-      <label>Year level</label>
+      <label for="year">Year level</label>
       <select id="year">
         <option value="">All</option>
       </select>
     </div>
 
-    <!-- Tier -->
     <div class="control">
-      <label>Show tier</label>
+      <label for="tier">Show tier</label>
       <select id="tier">
         <option value="">All tiers</option>
         <option value="bad">🔴 Critical</option>
@@ -73,9 +66,8 @@
       <div class="hint">Based on overall attendance %</div>
     </div>
 
-    <!-- Sort / Advanced -->
     <div class="control">
-      <label>Sort</label>
+      <label for="sort">Sort</label>
       <select id="sort">
         <option value="risk">Worst first</option>
         <option value="attendanceAsc">Overall % (low → high)</option>
@@ -100,22 +92,22 @@
 
         <div class="advGrid">
           <div>
-            <label style="margin:0 0 6px;">Overall below (%)</label>
+            <label style="margin:0 0 6px;" for="overallThreshold">Overall below (%)</label>
             <input id="overallThreshold" type="number" min="0" max="100" value="80"/>
           </div>
 
           <div>
-            <label style="margin:0 0 6px;">Subject below (%)</label>
+            <label style="margin:0 0 6px;" for="subjectThreshold">Subject below (%)</label>
             <input id="subjectThreshold" type="number" min="0" max="100" value="80"/>
           </div>
 
           <div>
-            <label style="margin:10px 0 6px;">Unjustified ≥</label>
+            <label style="margin:10px 0 6px;" for="unjustThreshold">Unjustified ≥</label>
             <input id="unjustThreshold" type="number" min="0" value="10"/>
           </div>
 
           <div>
-            <label style="margin:10px 0 6px;">Preview worst subjects</label>
+            <label style="margin:10px 0 6px;" for="maxSubjects">Preview worst subjects</label>
             <input id="maxSubjects" type="number" min="1" max="12" value="5"/>
           </div>
         </div>
@@ -171,7 +163,7 @@
     <button id="printVisibleBtn" class="miniBtn" type="button">🖨 Print current view</button>
 
     <div class="yearPrintWrap">
-      <span class="printLabel">Tutor stacks by year:</span>
+      <span class="printLabel">Te Mahiri tutor stacks by year:</span>
       <div id="yearPrintButtons" class="yearPrintButtons"></div>
     </div>
   </section>
