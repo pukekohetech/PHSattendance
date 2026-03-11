@@ -1,25 +1,16 @@
 <!doctype html>
 <html lang="en">
 <head>
-
-  <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0b1220">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="yes">
-
-
-
-  <button id="installBtn" class="installBtn" type="button" style="display:none;">
-  Install App
-</button>
-
-
-  
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
   <title>Attendance Quick Scan</title>
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="yes">
 
   <!-- PapaParse for CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -29,212 +20,209 @@
 </head>
 
 <body>
-<header>
-  <h1>Attendance Quick Scan</h1>
-  <div class="sub">
-    Kamar → Reporting → Attendance (select group of students or select all) → Subject Detailed → Actions → Spreedsheet
-     <br/>
-    Upload the detailed attendance CSV → quickly identify attendance concerns.
-    <br/>
-    Use <b>Open Bridge Profile</b> to copy parent email (Option A).
-  </div>
-</header>
+  <button id="installBtn" class="installBtn" type="button" style="display:none;">
+    Install App
+  </button>
 
-<section class="controls">
-  <!-- File upload -->
-  <div class="control">
-    <label>Upload report CSV</label>
-    <input id="file" type="file" accept=".csv"/>
-    <div class="hint">
-      If your report exports as “one long line”, it will be repaired automatically.
+  <header>
+    <h1>Attendance Quick Scan</h1>
+    <div class="sub">
+      Kamar → Reporting → Attendance (select group of students or select all) → Subject Detailed → Actions → Spreadsheet
+      <br/>
+      Upload the detailed attendance CSV → quickly identify attendance concerns.
+      <br/>
+      Use <b>Open Bridge Profile</b> to copy parent email (Option A).
     </div>
-  </div>
+  </header>
 
-  <!-- Search -->
-  <div class="control">
-    <label>Search</label>
-    <input id="search" type="text" placeholder="Name / ID / form class..."/>
-    <div class="hint">Example: “Smith”, “12RY”, “23562”</div>
-  </div>
-
-  <!-- Year -->
-  <div class="control">
-    <label>Year level</label>
-    <select id="year">
-      <option value="">All</option>
-    </select>
-  </div>
-
-  <!-- Tier -->
-  <div class="control">
-    <label>Show tier</label>
-    <select id="tier">
-      <option value="">All tiers</option>
-      <option value="bad">🔴 Critical</option>
-      <option value="warn">🟠 Concern</option>
-      <option value="watch">🟡 Watch</option>
-      <option value="good">🟢 OK</option>
-    </select>
-    <div class="hint">Based on overall attendance %</div>
-  </div>
-
-  <!-- Sort / Advanced -->
-  <div class="control">
-    <label>Sort</label>
-    <select id="sort">
-      <option value="risk">Worst first</option>
-      <option value="attendanceAsc">Overall % (low → high)</option>
-      <option value="attendanceDesc">Overall % (high → low)</option>
-      <option value="unjust">Unjustified (high → low)</option>
-      <option value="name">Name (A → Z)</option>
-    </select>
-
-    <!-- Flagged only toggle -->
-    <div class="toggleRow">
-      <span>Show only flagged</span>
-      <label class="switch">
-        <input id="flagOnly" type="checkbox"/>
-        <span class="slider"></span>
-      </label>
+  <section class="controls">
+    <!-- File upload -->
+    <div class="control">
+      <label>Upload report CSV</label>
+      <input id="file" type="file" accept=".csv"/>
+      <div class="hint">
+        If your report exports as “one long line”, it will be repaired automatically.
+      </div>
     </div>
 
-    <!-- Advanced settings -->
-    <details class="advanced" id="advanced">
-      <summary>
-        <span class="advTitle">⚙ Advanced settings</span>
-        <button class="miniBtn" id="closeAdvancedBtn" type="button">Close</button>
-      </summary>
+    <!-- Search -->
+    <div class="control">
+      <label>Search</label>
+      <input id="search" type="text" placeholder="Name / ID / form class..."/>
+      <div class="hint">Example: “Smith”, “12RY”, “23562”</div>
+    </div>
 
-      <div class="advGrid">
-        <div>
-          <label style="margin:0 0 6px;">Overall below (%)</label>
-          <input id="overallThreshold" type="number" min="0" max="100" value="80"/>
-        </div>
+    <!-- Year -->
+    <div class="control">
+      <label>Year level</label>
+      <select id="year">
+        <option value="">All</option>
+      </select>
+    </div>
 
-        <div>
-          <label style="margin:0 0 6px;">Subject below (%)</label>
-          <input id="subjectThreshold" type="number" min="0" max="100" value="80"/>
-        </div>
+    <!-- Tier -->
+    <div class="control">
+      <label>Show tier</label>
+      <select id="tier">
+        <option value="">All tiers</option>
+        <option value="bad">🔴 Critical</option>
+        <option value="warn">🟠 Concern</option>
+        <option value="watch">🟡 Watch</option>
+        <option value="good">🟢 OK</option>
+      </select>
+      <div class="hint">Based on overall attendance %</div>
+    </div>
 
-        <div>
-          <label style="margin:10px 0 6px;">Unjustified ≥</label>
-          <input id="unjustThreshold" type="number" min="0" value="10"/>
-        </div>
+    <!-- Sort / Advanced -->
+    <div class="control">
+      <label>Sort</label>
+      <select id="sort">
+        <option value="risk">Worst first</option>
+        <option value="attendanceAsc">Overall % (low → high)</option>
+        <option value="attendanceDesc">Overall % (high → low)</option>
+        <option value="unjust">Unjustified (high → low)</option>
+        <option value="name">Name (A → Z)</option>
+      </select>
 
-        <div>
-          <label style="margin:10px 0 6px;">Preview worst subjects</label>
-          <input id="maxSubjects" type="number" min="1" max="12" value="5"/>
-        </div>
+      <div class="toggleRow">
+        <span>Show only flagged</span>
+        <label class="switch">
+          <input id="flagOnly" type="checkbox"/>
+          <span class="slider"></span>
+        </label>
       </div>
 
-      <label style="margin-top:12px;">Filter by reason (optional)</label>
-      <div class="checkGrid">
-        <label class="check"><input id="fLowOverall" type="checkbox" checked> Low overall</label>
-        <label class="check"><input id="fHighUnjust" type="checkbox" checked> High unjustified</label>
-        <label class="check"><input id="fLowSubject" type="checkbox" checked> Low subject</label>
-        <label class="check"><input id="fMissingSubject" type="checkbox" checked> Missing subject data</label>
-      </div>
+      <details class="advanced" id="advanced">
+        <summary>
+          <span class="advTitle">⚙ Advanced settings</span>
+          <button class="miniBtn" id="closeAdvancedBtn" type="button">Close</button>
+        </summary>
 
-      <!-- Buttons exist for future features (export/reset) -->
-      <div class="btnrow">
-       <button id="export">Export Flagged (PDF)</button>
+        <div class="advGrid">
+          <div>
+            <label style="margin:0 0 6px;">Overall below (%)</label>
+            <input id="overallThreshold" type="number" min="0" max="100" value="80"/>
+          </div>
 
-      </div>
+          <div>
+            <label style="margin:0 0 6px;">Subject below (%)</label>
+            <input id="subjectThreshold" type="number" min="0" max="100" value="80"/>
+          </div>
 
-      <div class="hint" style="margin-top:10px;">
-        Tip: If “Email” buttons are disabled, check your <code>data/email-templates.json</code>.
-      </div>
-    </details>
-  </div>
-</section>
+          <div>
+            <label style="margin:10px 0 6px;">Unjustified ≥</label>
+            <input id="unjustThreshold" type="number" min="0" value="10"/>
+          </div>
 
-<!-- Stats bar -->
-<section class="statsbar">
-  <div class="stat">
-    <div class="k">Students shown</div>
-    <div class="v" id="statStudents">0</div>
-  </div>
+          <div>
+            <label style="margin:10px 0 6px;">Preview worst subjects</label>
+            <input id="maxSubjects" type="number" min="1" max="12" value="5"/>
+          </div>
+        </div>
 
-  <div class="stat">
-    <div class="k">Flagged shown</div>
-    <div class="v" id="statFlagged">0</div>
-  </div>
+        <label style="margin-top:12px;">Filter by reason (optional)</label>
+        <div class="checkGrid">
+          <label class="check"><input id="fLowOverall" type="checkbox" checked> Low overall</label>
+          <label class="check"><input id="fHighUnjust" type="checkbox" checked> High unjustified</label>
+          <label class="check"><input id="fLowSubject" type="checkbox" checked> Low subject</label>
+          <label class="check"><input id="fMissingSubject" type="checkbox" checked> Missing subject data</label>
+        </div>
 
-  <div class="stat">
-    <div class="k">Critical / Concern</div>
-    <div class="v" id="statRedOrange">0</div>
-  </div>
+        <div class="btnrow">
+          <button id="export" type="button">Export Flagged (PDF)</button>
+          <button id="reset" type="button">Reset</button>
+        </div>
 
-  <div class="stat">
-    <div class="k">High unjustified</div>
-    <div class="v" id="statHighUnjust">0</div>
-  </div>
+        <div class="hint" style="margin-top:10px;">
+          Tip: If “Email” buttons are disabled, check your <code>data/email-templates.json</code>.
+        </div>
+      </details>
+    </div>
+  </section>
 
-  <div class="stat">
-    <div class="k">Report title</div>
-    <div class="v" id="statTitle" style="font-size:13px; font-weight:1100;">—</div>
-  </div>
-</section>
+  <section class="statsbar">
+    <div class="stat">
+      <div class="k">Students shown</div>
+      <div class="v" id="statStudents">0</div>
+    </div>
 
-<main>
-  <div id="grid" class="grid"></div>
-  <div id="empty" class="empty" style="display:none;">Upload a report to begin.</div>
-</main>
+    <div class="stat">
+      <div class="k">Flagged shown</div>
+      <div class="v" id="statFlagged">0</div>
+    </div>
 
-<script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", async () => {
-      try {
-        const swUrl = new URL("./service-worker.js", window.location.href);
-        const reg = await navigator.serviceWorker.register(swUrl, { scope: "./" });
-        console.log("✅ SW registered:", reg.scope);
-      } catch (err) {
-        console.error("❌ SW register failed:", err);
-      }
-    });
-  }
-</script>
+    <div class="stat">
+      <div class="k">Critical / Concern</div>
+      <div class="v" id="statRedOrange">0</div>
+    </div>
 
+    <div class="stat">
+      <div class="k">High unjustified</div>
+      <div class="v" id="statHighUnjust">0</div>
+    </div>
 
-  
-<!-- Your app -->
-<script src="js/app.js"></script>
+    <div class="stat">
+      <div class="k">Report title</div>
+      <div class="v" id="statTitle" style="font-size:13px; font-weight:1100;">—</div>
+    </div>
+  </section>
+
+  <section class="printTools">
+    <button id="printVisibleBtn" class="miniBtn" type="button">🖨 Print current view</button>
+
+    <div class="yearPrintWrap">
+      <span class="printLabel">Tutor stacks by year:</span>
+      <div id="yearPrintButtons" class="yearPrintButtons"></div>
+    </div>
+  </section>
+
+  <div id="printStackRoot" class="printStackRoot" aria-hidden="true"></div>
+
+  <main>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty" style="display:none;">Upload a report to begin.</div>
+  </main>
 
   <script>
-  let deferredPrompt = null;
-  const btn = document.getElementById("installBtn");
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", async () => {
+        try {
+          const swUrl = new URL("./service-worker.js", window.location.href);
+          const reg = await navigator.serviceWorker.register(swUrl, { scope: "./" });
+          console.log("✅ SW registered:", reg.scope);
+        } catch (err) {
+          console.error("❌ SW register failed:", err);
+        }
+      });
+    }
+  </script>
 
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    if (btn) btn.style.display = "inline-flex";
-  });
+  <script src="js/app.js"></script>
 
-  if (btn) {
-    btn.addEventListener("click", async () => {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      btn.style.display = "none";
+  <script>
+    let deferredPrompt = null;
+    const btn = document.getElementById("installBtn");
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (btn) btn.style.display = "inline-flex";
     });
-  }
 
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    if (btn) btn.style.display = "none";
-  });
-</script>
+    if (btn) {
+      btn.addEventListener("click", async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        btn.style.display = "none";
+      });
+    }
 
-
+    window.addEventListener("appinstalled", () => {
+      deferredPrompt = null;
+      if (btn) btn.style.display = "none";
+    });
+  </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
