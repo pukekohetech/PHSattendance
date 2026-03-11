@@ -708,6 +708,59 @@ function buildTutorStudentPrintCard(student, overallThresh, subjThresh, unjustTh
     </article>
   `;
 }
+function printFilteredStyledCards() {
+  if (!els.printStackRoot) {
+    alert("Print stack container not found in the HTML.");
+    return;
+  }
+
+  const filteredStudents = getFilteredStudents();
+
+  if (!filteredStudents.length) {
+    alert("No students found in the current filtered view.");
+    return;
+  }
+
+  const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
+  const dateStr = new Date().toLocaleString();
+  const report = reportTitle || "Attendance Report";
+
+  const flaggedCount = filteredStudents.filter(s =>
+    isFlagged(s, overallThresh, subjThresh, unjustThresh, {
+      lowOverall: true,
+      highUnjust: true,
+      lowSubject: true,
+      missingSubject: true
+    })
+  ).length;
+
+  const sectionHtml = `
+    <section class="tutorPrintSection">
+      <div class="tutorPrintHeader">
+        <h2>Te Mahiri — Filtered View</h2>
+        <div class="tutorPrintMeta">
+          ${escapeHtml(report)}<br>
+          ${escapeHtml(dateStr)}<br>
+          ${filteredStudents.length} student(s) • ${flaggedCount} flagged
+        </div>
+      </div>
+
+      <div class="tutorPrintGrid">
+        ${filteredStudents
+          .slice()
+          .sort(sortStudentsByName)
+          .map(s => buildTutorStudentPrintCard(s, overallThresh, subjThresh, unjustThresh))
+          .join("")}
+      </div>
+    </section>
+  `;
+
+  els.printStackRoot.innerHTML = `<div class="tutorPrintPack">${sectionHtml}</div>`;
+
+  document.body.classList.remove("printing-visible");
+  document.body.classList.add("printing-stack");
+  window.print();
+}
 
 function printTutorStackForYear(year) {
   if (!els.printStackRoot) {
@@ -1118,4 +1171,5 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
 
