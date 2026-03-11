@@ -60,7 +60,7 @@ const els = {
   printStackRoot: document.getElementById("printStackRoot"),
 };
 
-// Status banner (helps diagnose GitHub Pages issues)
+// Status banner
 const statusBar = document.createElement("div");
 statusBar.id = "statusBar";
 statusBar.style.maxWidth = "1200px";
@@ -98,12 +98,11 @@ function escapeHtml(s) {
 /**
  * Repairs:
  * - report title line above headers
- * - "one long line" exports by inserting newlines before student IDs
+ * - one-long-line exports by inserting newlines before student IDs
  */
 function repairCsvText(text) {
   let t = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 
-  // Ensure StudentID header begins at a new line
   const headerIndex = t.indexOf("StudentID,");
   if (headerIndex > 0) {
     const before = t.slice(0, headerIndex).trim();
@@ -111,7 +110,6 @@ function repairCsvText(text) {
     t = before + "\n" + after;
   }
 
-  // If there are too few line breaks, attempt to break into rows before ID patterns
   const newlineCount = (t.match(/\n/g) || []).length;
   if (newlineCount < 5) {
     t = t.replace(/(\s)(\d{4,6},)/g, "\n$2");
@@ -143,7 +141,7 @@ function subjectChipClass(pct, subjThresh) {
   return "ok";
 }
 
-/* ---------------------- JSON Loading (safe) ---------------------- */
+/* ---------------------- JSON Loading ---------------------- */
 
 async function loadJSON(path) {
   const res = await fetch(path, { cache: "no-store" });
@@ -152,22 +150,20 @@ async function loadJSON(path) {
 }
 
 async function initConfigs() {
-  // Email templates
   try {
     emailConfig = await loadJSON("data/email-templates.json");
     if (!emailConfig?.templates) {
-      setStatus("Email templates loaded but invalid (missing templates key). Emails disabled.");
+      setStatus("Email templates loaded but invalid. Emails disabled.");
       emailConfig = null;
     } else {
       setStatus("Email templates loaded ✅");
     }
   } catch (e) {
-    setStatus("Email templates not loaded (check /data/email-templates.json). Emails disabled.");
+    setStatus("Email templates not loaded. Emails disabled.");
     console.warn(e);
     emailConfig = null;
   }
 
-  // Subject map
   try {
     subjectMap = await loadJSON("data/subject-map.json");
     if (!subjectMap || typeof subjectMap !== "object") subjectMap = {};
@@ -193,7 +189,6 @@ function normalizeData(rows) {
   if (!rows || !rows.length) return [];
   const headers = Object.keys(rows[0]);
 
-  // Detect subject blocks: Subject i, Attendance %, Stats
   const subjectBlocks = [];
   for (let i = 1; i <= 12; i++) {
     const subjCol = `Subject ${i}`;
@@ -252,9 +247,11 @@ function populateYearFilter(list) {
   const years = [...new Set(list.map(s => s.yearLevel).filter(Boolean))]
     .sort((a, b) => Number(a) - Number(b));
 
-  els.year.innerHTML =
-    `<option value="">All</option>` +
-    years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join("");
+  if (els.year) {
+    els.year.innerHTML =
+      `<option value="">All</option>` +
+      years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join("");
+  }
 
   if (els.yearPrintButtons) {
     els.yearPrintButtons.innerHTML = years.map(y => `
@@ -263,7 +260,7 @@ function populateYearFilter(list) {
         class="miniBtn"
         data-print-year="${escapeHtml(y)}"
       >
-        Print Y${escapeHtml(y)} tutor stack
+        Te Mahiri Y${escapeHtml(y)}
       </button>
     `).join("");
 
@@ -325,13 +322,11 @@ function severityPercent(score) {
   return Math.round((capped / 120) * 100);
 }
 
-/* ------------------------- Email helpers (template-driven) ------------------------- */
+/* ------------------------- Email helpers ------------------------- */
 
 function openParentEmailViaBridge({ bridgeUrl, mailtoParent }) {
-  // 1) Always open Bridge (new tab)
   window.open(bridgeUrl, "_blank", "noopener,noreferrer");
 
-  // 2) Try open Outlook mailto
   setTimeout(() => {
     try {
       window.location.href = mailtoParent;
@@ -363,7 +358,6 @@ function buildMailto(templateKey, student, subjThresh, toEmail) {
   if (!emailConfig?.templates?.[templateKey]) return null;
 
   const tpl = emailConfig.templates[templateKey];
-
   const schoolName = emailConfig.school?.name || "Pukekohe High School";
   const valuesLine = emailConfig.school?.valuesLine || "";
 
@@ -389,7 +383,7 @@ function buildMailto(templateKey, student, subjThresh, toEmail) {
   return `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-/* ------------------------- Filtering + Search helpers ------------------------- */
+/* ------------------------- Filtering helpers ------------------------- */
 
 function buildSearchHaystack(student) {
   const subjectHay = (student.subjects || [])
@@ -431,12 +425,10 @@ function getCurrentThresholds() {
   };
 }
 
-/* ------------------------- Export Flagged (PDF) - NO POPUPS ------------------------- */
+function getFilteredStudents() {
+  if (!students.length) return [];
 
-function buildFlaggedListForExport() {
-  if (!students.length) return { list: [], thresholds: null };
-
-  const qRaw = (els.search?.value || "").trim().toLowerCase();
+  const qRaw = els.search?.value?.trim().toLowerCase() || "";
   const qParts = qRaw.split(/\s+/).filter(Boolean);
 
   const y = els.year?.value || "";
@@ -444,10 +436,10 @@ function buildFlaggedListForExport() {
   const sort = els.sort?.value || "risk";
 
   const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
+  const flaggedOnly = !!els.flagOnly?.checked;
   const reasonGate = getReasonGate();
 
-  // 1) Filter by year/tier/search only (NOT flaggedOnly)
-  let filtered = students.filter((s) => {
+  let filtered = students.filter(s => {
     if (y && String(s.yearLevel) !== String(y)) return false;
 
     if (tierFilter) {
@@ -462,10 +454,12 @@ function buildFlaggedListForExport() {
       }
     }
 
+    const flagged = isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate);
+    if (flaggedOnly && !flagged) return false;
+
     return true;
   });
 
-  // 2) Sort
   filtered.sort((a, b) => {
     if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
     if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
@@ -474,7 +468,19 @@ function buildFlaggedListForExport() {
     return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
   });
 
-  // 3) Export ONLY flagged
+  return filtered;
+}
+
+/* ------------------------- Export Flagged PDF ------------------------- */
+
+function buildFlaggedListForExport() {
+  if (!students.length) return { list: [], thresholds: null };
+
+  const { overallThresh, subjThresh, unjustThresh } = getCurrentThresholds();
+  const reasonGate = getReasonGate();
+
+  const filtered = getFilteredStudents();
+
   const flagged = filtered.filter((s) =>
     isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate)
   );
@@ -493,7 +499,6 @@ function exportFlaggedPDF_NoPopup() {
     return;
   }
 
-  // Compact choices
   const MAX_LOW_SUBJECTS = 3;
   const MAX_REASONS = 2;
 
@@ -505,7 +510,6 @@ function exportFlaggedPDF_NoPopup() {
   const subjThresh = thresholds?.subjThresh ?? (Number(els.subjectThreshold?.value) || 80);
   const unjustThresh = thresholds?.unjustThresh ?? (Number(els.unjustThreshold?.value) || 10);
 
-  // Summary counts
   let criticalCount = 0;
   let concernCount = 0;
   let highUnjustCount = 0;
@@ -517,7 +521,6 @@ function exportFlaggedPDF_NoPopup() {
     if ((s.unjustified || 0) >= unjustThresh) highUnjustCount++;
   }
 
-  // Build student cards HTML
   const cardsHtml = list.map((s) => {
     const tier = overallTier(s.presentPct);
     const tierText = tierLabel(tier);
@@ -576,7 +579,6 @@ function exportFlaggedPDF_NoPopup() {
     `;
   }).join("");
 
-  // Build print container WITHOUT destroying the app
   const printWrap = document.createElement("div");
   printWrap.className = "print-page";
   printWrap.id = "printWrap";
@@ -609,10 +611,7 @@ function exportFlaggedPDF_NoPopup() {
     </p>
   `;
 
-  // Add to page
   document.body.appendChild(printWrap);
-
-  // Switch into print mode
   document.documentElement.classList.add("printing");
 
   const cleanup = () => {
@@ -623,7 +622,6 @@ function exportFlaggedPDF_NoPopup() {
 
   window.addEventListener("afterprint", cleanup);
 
-  // Print (delay lets layout settle)
   setTimeout(() => {
     try {
       window.print();
@@ -632,8 +630,6 @@ function exportFlaggedPDF_NoPopup() {
       alert("Printing failed.");
       cleanup();
     }
-
-    // fallback if afterprint doesn't fire
     setTimeout(() => cleanup(), 1200);
   }, 200);
 }
@@ -662,42 +658,52 @@ function sortStudentsByName(a, b) {
   return an.localeCompare(bn);
 }
 
-function lowSubjectsForPrint(student, subjThresh, limit = 3) {
-  const low = (student.subjects || [])
-    .filter(sub => sub.attendance !== null && sub.attendance < subjThresh)
-    .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
-    .slice(0, limit);
-
-  if (!low.length) return "—";
-
-  return low
-    .map(sub => `${sub.name} ${sub.attendance.toFixed(1)}%`)
-    .join(" • ");
-}
-
 function buildTutorStudentPrintCard(student, overallThresh, subjThresh, unjustThresh) {
   const overall = (student.presentPct === null) ? "N/A" : `${student.presentPct.toFixed(1)}%`;
-  const reasons = getReasons(student, overallThresh, subjThresh, unjustThresh)
-    .filter(r => r.type !== "good");
+  const tier = overallTier(student.presentPct);
+  const tierText = tierLabel(tier);
 
-  const reasonsHtml = reasons.length
-    ? reasons.map(r => `<span class="tutorPrintReason">${escapeHtml(r.text)}</span>`).join("")
-    : `<span class="tutorPrintReason">No flags</span>`;
+  const reasons = getReasons(student, overallThresh, subjThresh, unjustThresh);
+  const reasonsHtml = reasons.map(r => `
+    <span class="tutorPrintReason ${escapeHtml(r.type)}">${escapeHtml(r.text)}</span>
+  `).join("");
+
+  const lowSubjects = (student.subjects || [])
+    .filter(sub => sub.attendance !== null && sub.attendance < subjThresh)
+    .sort((a, b) => (a.attendance ?? 999) - (b.attendance ?? 999))
+    .slice(0, 4);
+
+  const lowSubjectsHtml = lowSubjects.length
+    ? lowSubjects.map(sub => `
+        <span class="tutorPrintSubChip low">
+          <span class="code">${escapeHtml(sub.name)}</span> ${escapeHtml(sub.attendance.toFixed(0))}%
+        </span>
+      `).join("")
+    : `<span class="tutorPrintSubChip ok">No low subjects</span>`;
 
   return `
     <article class="tutorPrintStudent">
-      <div class="tutorPrintTop">
-        <div>${escapeHtml(student.lastName)}, ${escapeHtml(student.firstName)}</div>
-        <div>${escapeHtml(student.studentId)}</div>
+      <div class="tutorPrintSeverity">
+        <div class="fill ${escapeHtml(tier)}"></div>
       </div>
 
-      <div class="tutorPrintSub">
-        <div><strong>Year:</strong> ${escapeHtml(student.yearLevel || "—")} &nbsp; <strong>Tutor:</strong> ${escapeHtml(student.formClass || "—")}</div>
-        <div><strong>Overall:</strong> ${escapeHtml(overall)} &nbsp; <strong>Unjustified:</strong> ${escapeHtml(String(student.unjustified ?? 0))}</div>
-        <div><strong>Lowest subjects:</strong> ${escapeHtml(lowSubjectsForPrint(student, subjThresh, 3))}</div>
+      <div class="tutorPrintTop">
+        <div>
+          <div class="tutorPrintName">${escapeHtml(student.lastName)}, ${escapeHtml(student.firstName)}</div>
+          <div class="tutorPrintMetaLine">
+            ID: ${escapeHtml(student.studentId)} • Y${escapeHtml(student.yearLevel || "—")} • ${escapeHtml(student.formClass || "—")}
+          </div>
+          <div class="tutorPrintTier ${escapeHtml(tier)}">${escapeHtml(tierText)}</div>
+        </div>
+
+        <div class="tutorPrintBadge ${escapeHtml(tier)}">${escapeHtml(overall)}</div>
       </div>
 
       <div class="tutorPrintReasons">${reasonsHtml}</div>
+
+      <div class="tutorPrintSubStrip">
+        ${lowSubjectsHtml}
+      </div>
     </article>
   `;
 }
@@ -708,7 +714,9 @@ function printTutorStackForYear(year) {
     return;
   }
 
-  const yearStudents = students
+  const filteredStudents = getFilteredStudents();
+
+  const yearStudents = filteredStudents
     .filter(s => String(s.yearLevel) === String(year))
     .slice()
     .sort((a, b) => {
@@ -718,7 +726,7 @@ function printTutorStackForYear(year) {
     });
 
   if (!yearStudents.length) {
-    alert(`No students found for Year ${year}.`);
+    alert(`No students found for Year ${year} in the current filtered view.`);
     return;
   }
 
@@ -749,7 +757,7 @@ function printTutorStackForYear(year) {
       return `
         <section class="tutorPrintSection">
           <div class="tutorPrintHeader">
-            <h2>Year ${escapeHtml(String(year))} — Tutor ${escapeHtml(tutorCode)}</h2>
+            <h2>Te Mahiri Y${escapeHtml(String(year))} — ${escapeHtml(tutorCode)}</h2>
             <div class="tutorPrintMeta">
               ${escapeHtml(report)}<br>
               ${escapeHtml(dateStr)}<br>
@@ -757,11 +765,13 @@ function printTutorStackForYear(year) {
             </div>
           </div>
 
-          ${tutorStudents
-            .slice()
-            .sort(sortStudentsByName)
-            .map(s => buildTutorStudentPrintCard(s, overallThresh, subjThresh, unjustThresh))
-            .join("")}
+          <div class="tutorPrintGrid">
+            ${tutorStudents
+              .slice()
+              .sort(sortStudentsByName)
+              .map(s => buildTutorStudentPrintCard(s, overallThresh, subjThresh, unjustThresh))
+              .join("")}
+          </div>
         </section>
       `;
     }).join("");
@@ -790,46 +800,9 @@ function render() {
     return;
   }
 
-  const qRaw = els.search?.value?.trim().toLowerCase() || "";
-  const qParts = qRaw.split(/\s+/).filter(Boolean);
-
-  const y = els.year?.value || "";
-  const tierFilter = els.tier?.value || "";
-  const sort = els.sort?.value || "risk";
-
+  const filtered = getFilteredStudents();
   const { overallThresh, subjThresh, unjustThresh, maxSubjects } = getCurrentThresholds();
-  const flaggedOnly = !!els.flagOnly?.checked;
-
   const reasonGate = getReasonGate();
-
-  let filtered = students.filter(s => {
-    if (y && String(s.yearLevel) !== String(y)) return false;
-
-    if (tierFilter) {
-      const t = overallTier(s.presentPct);
-      if (t !== tierFilter) return false;
-    }
-
-    if (qParts.length) {
-      const hay = buildSearchHaystack(s);
-      for (const p of qParts) {
-        if (!hay.includes(p)) return false;
-      }
-    }
-
-    const flagged = isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate);
-    if (flaggedOnly && !flagged) return false;
-
-    return true;
-  });
-
-  filtered.sort((a, b) => {
-    if (sort === "name") return `${a.lastName},${a.firstName}`.localeCompare(`${b.lastName},${b.firstName}`);
-    if (sort === "attendanceAsc") return (a.presentPct ?? 999) - (b.presentPct ?? 999);
-    if (sort === "attendanceDesc") return (b.presentPct ?? -1) - (a.presentPct ?? -1);
-    if (sort === "unjust") return (b.unjustified ?? 0) - (a.unjustified ?? 0);
-    return riskScore(b, overallThresh, subjThresh, unjustThresh) - riskScore(a, overallThresh, subjThresh, unjustThresh);
-  });
 
   const flaggedCount = filtered.filter(s => isFlagged(s, overallThresh, subjThresh, unjustThresh, reasonGate)).length;
   const redOrange = filtered.filter(s => {
@@ -892,7 +865,7 @@ function render() {
     }).join("");
 
     const studentTo = `${s.studentId}@${ORG_DOMAIN}`;
-    const parentTo = ""; // teacher pastes parent email from Bridge
+    const parentTo = "";
 
     const mailtoStudent = buildMailto("student_warning", s, subjThresh, studentTo);
     const mailtoParent = buildMailto("parent_inform", s, subjThresh, parentTo);
@@ -954,7 +927,6 @@ function render() {
       </div>
     `;
 
-    // Wire parent action (Bridge + Outlook)
     const parentBtn = card.querySelector('[data-action="email-parent"]');
     if (parentBtn && mailtoParent) {
       parentBtn.addEventListener("click", (ev) => {
@@ -968,10 +940,9 @@ function render() {
   }
 }
 
-/* ---------------------- DOM refresh (for restore after print) ---------------------- */
+/* ---------------------- DOM refresh ---------------------- */
 
 function cacheDom() {
-  // in case restore rebuilt DOM, refresh references
   els.file = document.getElementById("file");
   els.search = document.getElementById("search");
   els.year = document.getElementById("year");
@@ -1033,10 +1004,8 @@ function wireInputs() {
     if (els.advanced) els.advanced.open = false;
   });
 
-  // Export flagged to PDF (no popups)
   if (els.export && !els.export.dataset.wired) {
     els.export.dataset.wired = "1";
-
     els.export.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1050,7 +1019,6 @@ function wireInputs() {
     });
   }
 
-  // Reset (optional)
   els.reset?.addEventListener("click", () => {
     if (confirm("Clear the current report and reset filters?")) {
       students = [];
@@ -1099,7 +1067,6 @@ function wireFileUpload() {
       const lines = text.split("\n");
       let csvText = text;
 
-      // If first line is title and second line contains StudentID header
       if (lines.length > 1 && !lines[0].includes("StudentID") && lines[1].includes("StudentID")) {
         csvText = lines.slice(1).join("\n");
       }
@@ -1131,7 +1098,6 @@ function wireFileUpload() {
           alert("Could not parse CSV. Check file format.");
         }
       });
-
     } catch (err) {
       console.error(err);
       setStatus("Failed to read file.");
