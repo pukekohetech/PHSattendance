@@ -565,238 +565,7 @@ main{
 }
 
 /* ===========================
-   PRINT / PDF EXPORT (Guaranteed)
-   =========================== */
-
-/* printing mode (before window.print()) */
-
-/* PRINT MODE: show print-page + hide app */
-.print-page { display: none; }
-
-html.printing .print-page { display: block !important; }
-
-html.printing header,
-html.printing .controls,
-html.printing .statsbar,
-html.printing main,
-html.printing #grid,
-html.printing #empty,
-html.printing details,
-html.printing .installBtn {
-  display: none !important;
-}
-
-html.printing *{
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
-}
-
-
-html.printing body{
-  background:#fff !important;
-}
-
-
-html.printing *{
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
-}
-
-/* default hidden unless printing */
-.print-page{
-  display:none;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color:#111;
-  background:#fff;
-  margin:0;
-  padding:6mm;
-}
-
-.print-header{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:14px;
-  margin-bottom:10px;
-  border-bottom:2px solid #111;
-  padding-bottom:8px;
-}
-
-.print-title h1{
-  margin:0;
-  font-size:16px;
-  letter-spacing:.2px;
-}
-
-.print-title .sub{
-  margin-top:3px;
-  font-size:10.5px;
-  line-height:1.35;
-  color:#333;
-}
-
-.print-metrics{
-  text-align:right;
-  font-size:10.5px;
-  line-height:1.4;
-  color:#333;
-  font-weight:700;
-}
-
-.print-summary{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  margin-top:8px;
-}
-
-.print-kpi{
-  border:1.8px solid #111;
-  border-radius:999px;
-  padding:3px 10px;
-  font-size:10.5px;
-  font-weight:900;
-  white-space:nowrap;
-}
-
-.print-kpi.bad{ border-color:#c00; color:#c00; }
-.print-kpi.warn{ border-color:#d60; color:#d60; }
-.print-kpi.watch{ border-color:#a80; color:#a80; }
-
-.print-cards{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:8px;
-  margin-top:10px;
-}
-
-.print-card{
-  border:1.8px solid #111;
-  border-radius:10px;
-  padding:8px 10px;
-  break-inside:avoid;
-  page-break-inside:avoid;
-}
-
-.print-card-top{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:10px;
-}
-
-.print-student .name{
-  margin:0;
-  font-size:12.5px;
-  font-weight:900;
-  line-height:1.15;
-}
-
-.print-student .meta{
-  margin-top:2px;
-  font-size:10px;
-  color:#333;
-  line-height:1.25;
-}
-
-.print-overall{
-  text-align:right;
-}
-
-.print-overall .badge{
-  display:inline-block;
-  font-weight:900;
-  font-size:12px;
-  padding:3px 9px;
-  border-radius:999px;
-  border:2.6px solid #111;
-  white-space:nowrap;
-}
-
-.print-overall .tier{
-  margin-top:3px;
-  font-size:10px;
-  color:#333;
-  font-weight:800;
-}
-
-.print-overall .badge.bad{ border-color:#c00; color:#c00; }
-.print-overall .badge.warn{ border-color:#d60; color:#d60; }
-.print-overall .badge.watch{ border-color:#a80; color:#a80; }
-.print-overall .badge.good{ border-color:#080; color:#080; }
-
-.print-reasons{
-  display:flex;
-  flex-wrap:wrap;
-  gap:5px;
-  margin-top:6px;
-}
-
-.print-pill{
-  font-size:9.5px;
-  font-weight:800;
-  padding:1px 7px;
-  border-radius:999px;
-  border:1.8px solid #111;
-  white-space:nowrap;
-}
-
-.print-pill.bad{ border-color:#c00; color:#c00; }
-.print-pill.warn{ border-color:#d60; color:#d60; }
-.print-pill.watch{ border-color:#a80; color:#a80; }
-.print-pill.good{ border-color:#080; color:#080; }
-
-.print-subjects{
-  margin-top:7px;
-  border-top:1px solid #111;
-  padding-top:6px;
-}
-
-.print-subjects h3{
-  margin:0 0 5px 0;
-  font-size:10px;
-  letter-spacing:.2px;
-  text-transform:uppercase;
-}
-
-.print-subject-list{
-  display:grid;
-  grid-template-columns:1fr 60px;
-  gap:3px 8px;
-  font-size:10px;
-  line-height:1.2;
-}
-
-.print-subject-list .pct{
-  text-align:right;
-  font-weight:900;
-}
-
-.print-small{
-  font-size:10.5px;
-  color:#333;
-}
-
-@page{
-  size:A4;
-  margin:10mm;
-}
-
-/* fallback: still show print-page in normal print flow */
-@media print{
-  .print-page{ display:block !important; }
-  *{
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-}
-
-@media print and (max-width:600px){
-  .print-cards{ grid-template-columns:1fr; }
-}
-
-/* ===========================
-   PRINT TOOLS BAR + TUTOR STACK PRINT
+   PRINT TOOLS BAR + COLOUR TUTOR STACK PRINT
    =========================== */
 
 .printTools{
@@ -849,9 +618,9 @@ html.printing *{
 }
 
 .tutorPrintHeader{
-  margin:0 0 14px;
+  margin:0 0 12px;
   padding:0 0 10px;
-  border-bottom:2px solid #000;
+  border-bottom:2px solid rgba(11,18,32,0.22);
 }
 
 .tutorPrintHeader h2{
@@ -862,49 +631,146 @@ html.printing *{
 
 .tutorPrintMeta{
   font-size:12px;
-  color:#222;
+  color:#334155;
   line-height:1.4;
 }
 
+.tutorPrintGrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
 .tutorPrintStudent{
-  border:1px solid #000;
-  border-radius:8px;
-  padding:10px 12px;
-  margin:0 0 10px;
+  background:#fff;
+  border:1px solid rgba(11,18,32,0.12);
+  border-radius:16px;
+  padding:12px;
+  box-shadow:none;
   break-inside:avoid;
   page-break-inside:avoid;
+  overflow:hidden;
 }
+
+.tutorPrintSeverity{
+  height:8px;
+  border-radius:999px;
+  background:rgba(11,18,32,0.10);
+  overflow:hidden;
+  margin-bottom:10px;
+}
+
+.tutorPrintSeverity .fill{
+  height:100%;
+  width:100%;
+  border-radius:999px;
+}
+
+.tutorPrintSeverity .fill.good{ background: linear-gradient(90deg, rgba(22,163,74,0.9), rgba(22,163,74,0.5)); }
+.tutorPrintSeverity .fill.watch{ background: linear-gradient(90deg, rgba(250,204,21,0.95), rgba(250,204,21,0.55)); }
+.tutorPrintSeverity .fill.warn{ background: linear-gradient(90deg, rgba(245,158,11,0.95), rgba(245,158,11,0.55)); }
+.tutorPrintSeverity .fill.bad{ background: linear-gradient(90deg, rgba(220,38,38,0.95), rgba(220,38,38,0.55)); }
+.tutorPrintSeverity .fill.na{ background: rgba(11,18,32,0.12); }
 
 .tutorPrintTop{
   display:flex;
   justify-content:space-between;
   gap:10px;
-  margin-bottom:6px;
-  font-weight:1100;
-  font-size:14px;
+  align-items:flex-start;
 }
 
-.tutorPrintSub{
+.tutorPrintName{
+  font-weight:1100;
+  font-size:15px;
+  line-height:1.15;
+}
+
+.tutorPrintMetaLine{
+  margin-top:4px;
+  font-size:12px;
+  color:rgba(11,18,32,0.65);
+}
+
+.tutorPrintBadge{
+  min-width:86px;
+  text-align:center;
+  padding:8px 10px;
+  border-radius:999px;
+  font-weight:1100;
+  border:1px solid rgba(11,18,32,0.12);
+  background:#f0f3f9;
   font-size:13px;
-  line-height:1.45;
+}
+
+.tutorPrintBadge.good{ background:rgba(22,163,74,0.12); color:#16a34a; border-color:rgba(22,163,74,0.35); }
+.tutorPrintBadge.watch{ background:rgba(250,204,21,0.18); color:#8a6b00; border-color:rgba(250,204,21,0.45); }
+.tutorPrintBadge.warn{ background:rgba(245,158,11,0.16); color:#f59e0b; border-color:rgba(245,158,11,0.35); }
+.tutorPrintBadge.bad{ background:rgba(220,38,38,0.12); color:#dc2626; border-color:rgba(220,38,38,0.35); }
+.tutorPrintBadge.na{ color:rgba(11,18,32,0.65); }
+
+.tutorPrintTier{
+  margin-top:8px;
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(11,18,32,0.12);
+  background:#fff;
+  font-size:12px;
+  font-weight:1100;
 }
 
 .tutorPrintReasons{
-  margin-top:6px;
-  font-size:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
 }
 
 .tutorPrintReason{
-  display:inline-block;
-  border:1px solid #000;
+  font-size:12px;
+  font-weight:1100;
+  padding:6px 10px;
   border-radius:999px;
-  padding:2px 8px;
-  margin:0 6px 6px 0;
+  border:1px solid rgba(11,18,32,0.12);
+  background:#f0f3f9;
 }
 
-/* ===========================
-   PRINT CURRENT VIEW / STACK
-   =========================== */
+.tutorPrintReason.bad{ background:rgba(220,38,38,0.12); color:#dc2626; border-color:rgba(220,38,38,0.35); }
+.tutorPrintReason.warn{ background:rgba(245,158,11,0.16); color:#f59e0b; border-color:rgba(245,158,11,0.35); }
+.tutorPrintReason.watch{ background:rgba(250,204,21,0.18); color:#8a6b00; border-color:rgba(250,204,21,0.45); }
+.tutorPrintReason.good{ background:rgba(22,163,74,0.12); color:#16a34a; border-color:rgba(22,163,74,0.35); }
+
+.tutorPrintSubStrip{
+  margin-top:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+
+.tutorPrintSubChip{
+  border:1px solid rgba(11,18,32,0.12);
+  background:#fff;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:12px;
+  font-weight:1100;
+  display:flex;
+  gap:8px;
+  align-items:center;
+  white-space:nowrap;
+}
+
+.tutorPrintSubChip .code{
+  color:rgba(11,18,32,0.75);
+  font-weight:1100;
+}
+
+.tutorPrintSubChip.low{ background:rgba(220,38,38,0.12); color:#dc2626; border-color:rgba(220,38,38,0.35); }
+.tutorPrintSubChip.med{ background:rgba(245,158,11,0.16); color:#f59e0b; border-color:rgba(245,158,11,0.35); }
+.tutorPrintSubChip.ok{ background:rgba(22,163,74,0.12); color:#16a34a; border-color:rgba(22,163,74,0.35); }
 
 @media print{
   body.printing-visible .print-page,
@@ -932,7 +798,7 @@ html.printing *{
 
   body.printing-visible #grid{
     display:grid !important;
-    grid-template-columns:repeat(3, 1fr) !important;
+    grid-template-columns:repeat(2, 1fr) !important;
     gap:10px !important;
   }
 
@@ -957,5 +823,18 @@ html.printing *{
 
   body.printing-stack .printStackRoot{
     display:block !important;
+  }
+
+  body.printing-stack .tutorPrintGrid{
+    grid-template-columns:1fr 1fr !important;
+  }
+
+  body.printing-stack .tutorPrintStudent{
+    box-shadow:none !important;
+  }
+
+  body.printing-stack *{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
