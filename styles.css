@@ -186,6 +186,7 @@ details.advanced summary::-webkit-details-marker{
 .miniBtn{
   border:1px solid var(--border);
   background:#fff;
+  color:var(--text);
   border-radius:10px;
   padding:6px 10px;
   font-size:12px;
@@ -838,3 +839,4 @@ main{
     print-color-adjust: exact !important;
   }
 }
+
