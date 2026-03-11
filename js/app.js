@@ -56,6 +56,7 @@ const els = {
   statTitle: document.getElementById("statTitle"),
 
   printVisibleBtn: document.getElementById("printVisibleBtn"),
+  printFilteredStyledBtn: document.getElementById("printFilteredStyledBtn"),
   yearPrintButtons: document.getElementById("yearPrintButtons"),
   printStackRoot: document.getElementById("printStackRoot"),
 };
@@ -975,6 +976,7 @@ function cacheDom() {
   els.statTitle = document.getElementById("statTitle");
 
   els.printVisibleBtn = document.getElementById("printVisibleBtn");
+  els.printFilteredStyledBtn = document.getElementById("printFilteredStyledBtn");
   els.yearPrintButtons = document.getElementById("yearPrintButtons");
   els.printStackRoot = document.getElementById("printStackRoot");
 }
@@ -1116,3 +1118,4 @@ function wireFileUpload() {
   setStatus("Ready. Upload a CSV.");
   render();
 })();
+
